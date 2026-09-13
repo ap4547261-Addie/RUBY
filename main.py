@@ -68,11 +68,10 @@ def main(page: ft.Page):
     page.overlay.append(file_picker)
 
     def choose_model(e):
-        file_picker.pick_files(
-            allow_multiple=False,
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=["gguf"],
-        )
+    file_picker.pick_files(
+        allow_multiple=False,
+        file_type=ft.FilePickerFileType.ANY,
+    )
 
     def send_message(e):
         message = message_box.value.strip()
