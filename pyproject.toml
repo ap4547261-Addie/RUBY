@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ruby"
+version = "0.1.0"
+description = "Ruby - Local AI companion"
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "flet==0.26.0",
+    "llama-cpp-python==0.3.32",
+]
+
+[tool.setuptools.packages.find]
+include = ["brain*", "memory*", "prompts*"]
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+
+[tool.flet.flutter.pubspec.dependency_overrides]
+webview_flutter_android = "4.9.0"
