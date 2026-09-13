@@ -68,7 +68,7 @@ def main(page: ft.Page):
     page.overlay.append(file_picker)
 
     def choose_model(e):
-    file_picker.pick_files(
+        file_picker.pick_files(
         allow_multiple=False,
         file_type=ft.FilePickerFileType.ANY,
     )
