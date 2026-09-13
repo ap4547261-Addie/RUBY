@@ -157,6 +157,7 @@ jobs:
 
         run: |
           flet build apk \
+            --module-name main.py \
             --arch arm64-v8a \
             --verbose
 
