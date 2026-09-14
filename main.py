@@ -1,150 +1,235 @@
+# main.py - Ruby with Settings
+
 import flet as ft
 
 from brain.local_brain import LocalBrain
 from brain.response_engine import ResponseEngine
 from prompts.ruby_prompt import RUBY_PROMPT
+from settings.settings_manager import SettingsManager
 
 
 def main(page: ft.Page):
-    page.title = "Ruby v0.1"
+    page.title = "Ruby"
     page.padding = 10
+    page.theme_mode = ft.ThemeMode.DARK
+    page.bgcolor = "#101014"
 
+    # ----------------------------------------
+    # Core
+    # ----------------------------------------
     brain = LocalBrain()
     response_engine = ResponseEngine(brain)
+    settings = SettingsManager()
 
-    chat = ft.Column(
-        expand=True,
-        scroll=ft.ScrollMode.AUTO,
-        spacing=10,
-    )
+    # ----------------------------------------
+    # UI
+    # ----------------------------------------
+    chat = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO, spacing=10)
+    status = ft.Text("🧠 Ruby's brain is not loaded.", color=ft.Colors.GREY_400, size=12)
 
-    status = ft.Text(
-        "🧠 Ruby's brain is not loaded."
-    )
-
-    def add_message(sender, message):
+    def add_message(sender, message, is_user=False):
+        color = ft.Colors.CYAN_400 if is_user else ft.Colors.PINK_400
         chat.controls.append(
-            ft.Text(
-                f"{sender}: {message}",
-                selectable=True,
-                size=16,
-            )
+            ft.Text(f"{sender}: {message}", selectable=True, size=16, color=color)
         )
         page.update()
 
-    def handle_model_result(e: ft.FilePickerResultEvent):
-        if not e.files:
-            status.value = "No model selected."
-            page.update()
-            return
-
-        selected = e.files[0]
-
-        status.value = f"🧠 Loading {selected.name}..."
+    # ----------------------------------------
+    # Model Loading
+    # ----------------------------------------
+    def load_model(path, name):
+        status.value = f"🧠 Loading {name}..."
         page.update()
 
-        if not selected.path:
-            status.value = "❌ Android did not provide a file path."
+        success = brain.load_model(path)
+        if success:
+            status.value = f"🧠 {name} loaded. Ruby is awake!"
+            settings.set("model_path", path)
+            settings.set("model_name", name)
+            add_message("Ruby", "Hyy Addie 😌 I'm awake!")
+        else:
+            status.value = f"❌ Failed to load {name}"
+            page.update()
+
+    def handle_file_pick(e: ft.FilePickerResultEvent):
+        if not e.files:
+            return
+        f = e.files[0]
+        if not f.path:
+            status.value = "❌ No file path provided."
             page.update()
             return
+        load_model(f.path, f.name)
 
-        success = brain.load_model(selected.path)
-
-        if success:
-            status.value = "🧠 Qwen2.5 loaded. Ruby is awake!"
-
-            add_message(
-                "Ruby",
-                "Hyy Addie 😌 I'm awake! My brain is loaded.",
-            )
-        else:
-            status.value = "❌ Qwen2.5 failed to load."
-            page.update()
-
-    file_picker = ft.FilePicker(
-        on_result=handle_model_result
-    )
-
+    file_picker = ft.FilePicker(on_result=handle_file_pick)
     page.overlay.append(file_picker)
 
-    def choose_model(e):
-        file_picker.pick_files(
-            allow_multiple=False,
-            file_type=ft.FilePickerFileType.ANY,
+    # ----------------------------------------
+    # Settings Dialog
+    # ----------------------------------------
+    def open_settings(e):
+        # Account
+        name_field = ft.TextField(
+            label="Name",
+            value=settings.get("user_name", ""),
+            bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
+        )
+        phone_field = ft.TextField(
+            label="Phone Number",
+            value=settings.get("user_phone", ""),
+            keyboard_type=ft.KeyboardType.PHONE,
+            bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
+        )
+        email_field = ft.TextField(
+            label="Email",
+            value=settings.get("user_email", ""),
+            keyboard_type=ft.KeyboardType.EMAIL,
+            bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
+        # Brain
+        model_name_label = ft.Text(
+            settings.get("model_name") or "No model selected",
+            size=13, color=ft.Colors.GREY_400,
+        )
+        context_field = ft.TextField(
+            label="Context Size",
+            value=str(settings.get("context_size", 1024)),
+            keyboard_type=ft.KeyboardType.NUMBER,
+            bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
+        )
+        threads_field = ft.TextField(
+            label="Threads",
+            value=str(settings.get("threads", 4)),
+            keyboard_type=ft.KeyboardType.NUMBER,
+            bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
+        )
+
+        def pick_model(ev):
+            page.close(settings_dialog)
+            file_picker.pick_files(
+                allow_multiple=False,
+                file_type=ft.FilePickerFileType.ANY,
+            )
+
+        def save_and_close(ev):
+            try:
+                ctx = int(context_field.value or 1024)
+                thr = int(threads_field.value or 4)
+            except ValueError:
+                ctx, thr = 1024, 4
+
+            settings.update({
+                "user_name": name_field.value.strip() or "Addie",
+                "user_phone": phone_field.value.strip(),
+                "user_email": email_field.value.strip(),
+                "context_size": ctx,
+                "threads": thr,
+            })
+            status.value = "✅ Settings saved."
+            page.close(settings_dialog)
+            page.update()
+
+        settings_dialog = ft.AlertDialog(
+            title=ft.Text("⚙️ Settings"),
+            content=ft.Column(
+                [
+                    # --- Account ---
+                    ft.Text("👤 Account", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
+                    name_field,
+                    phone_field,
+                    email_field,
+                    ft.ElevatedButton("🔐 Sign in with Google", disabled=True, width=320),
+                    ft.Divider(),
+
+                    # --- Brain ---
+                    ft.Text("🧠 Brain", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
+                    model_name_label,
+                    ft.ElevatedButton(
+                        "Choose Model File",
+                        icon=ft.Icons.UPLOAD_FILE,
+                        on_click=pick_model,
+                        width=320,
+                    ),
+                    context_field,
+                    threads_field,
+                    ft.Divider(),
+
+                    # --- Integrations ---
+                    ft.Text("🔗 Integrations", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
+                    ft.Text("Pinecone: Not connected", size=13, color=ft.Colors.GREY_400),
+                    ft.Text("Instagram: Not connected", size=13, color=ft.Colors.GREY_400),
+                ],
+                tight=True, spacing=10, width=340, scroll=ft.ScrollMode.AUTO,
+            ),
+            actions=[
+                ft.TextButton("Save", on_click=save_and_close),
+                ft.TextButton("Close", on_click=lambda ev: page.close(settings_dialog)),
+            ],
+        )
+        page.open(settings_dialog)
+
+    # ----------------------------------------
+    # Send Message
+    # ----------------------------------------
     def send_message(e):
-        message = message_box.value.strip()
-
-        if not message:
+        msg = message_box.value.strip()
+        if not msg:
             return
-
         message_box.value = ""
-
-        add_message("You", message)
+        add_message("You", msg, is_user=True)
 
         if not brain.is_loaded():
-            add_message(
-                "Ruby",
-                "Load my Qwen2.5 brain first 😭",
-            )
+            add_message("Ruby", "Load my brain first 😭 (⚙️)")
             return
 
         status.value = "💭 Ruby is thinking..."
         page.update()
-
-        response = response_engine.respond(
-            message,
-            RUBY_PROMPT,
-        )
-
+        reply = response_engine.respond(msg, RUBY_PROMPT)
         status.value = "🧠 Ruby is ready."
+        add_message("Ruby", reply)
 
-        add_message(
-            "Ruby",
-            response,
-        )
-
+    # ----------------------------------------
+    # Layout
+    # ----------------------------------------
     message_box = ft.TextField(
-        hint_text="Talk to Ruby...",
-        expand=True,
-        multiline=False,
-        on_submit=send_message,
+        hint_text="Talk to Ruby...", expand=True, multiline=False,
+        on_submit=send_message, bgcolor="#18181C", color=ft.Colors.WHITE,
+        border_color="#3A3A46", focused_border_color=ft.Colors.PINK_400,
     )
-
-    load_button = ft.ElevatedButton(
-        text="🧠 Load Qwen2.5",
-        icon=ft.Icons.UPLOAD_FILE,
-        on_click=choose_model,
+    settings_button = ft.IconButton(
+        icon=ft.Icons.SETTINGS, on_click=open_settings,
+        icon_color=ft.Colors.GREY_400, tooltip="Settings",
     )
-
     send_button = ft.IconButton(
-        icon=ft.Icons.SEND,
-        on_click=send_message,
+        icon=ft.Icons.SEND, on_click=send_message, icon_color=ft.Colors.PINK_400,
     )
 
     page.add(
-        ft.Text(
-            "Ruby",
-            size=30,
-            weight=ft.FontWeight.BOLD,
+        ft.Row(
+            controls=[
+                ft.Text("Ruby", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.PINK_400),
+                settings_button,
+            ],
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         ),
         status,
         ft.Divider(),
-        load_button,
         chat,
-        ft.Row(
-            controls=[
-                message_box,
-                send_button,
-            ]
-        ),
+        ft.Row(controls=[message_box, send_button]),
     )
 
-    add_message(
-        "Ruby",
-        "Hyy Addie 👀 Load my Qwen2.5 brain.",
-    )
+    add_message("Ruby", "Hyy Addie 👀 Ready when you are.")
+
+    # ----------------------------------------
+    # Auto-load saved model
+    # ----------------------------------------
+    if settings.has_model():
+        print(f"📂 Auto-loading: {settings.get('model_name')}")
+        load_model(settings.get("model_path"), settings.get("model_name"))
+    else:
+        status.value = "🧠 No model selected. Tap ⚙️ to choose one."
+        page.update()
 
 
 if __name__ == "__main__":
