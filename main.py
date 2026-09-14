@@ -1,5 +1,5 @@
 # main.py - Ruby V0.2
-# Fixes: proper chat template, no summarizer bug, clean UI
+# Uses: LocalBrain (prompt template) → ResponseEngine (router) → RUBY_PROMPT (personality)
 
 import flet as ft
 
@@ -57,7 +57,6 @@ def main(page: ft.Page):
             return
 
         selected = e.files[0]
-
         status.value = f"🧠 Loading {selected.name}..."
         page.update()
 
@@ -106,13 +105,9 @@ def main(page: ft.Page):
         status.value = "💭 Ruby is thinking..."
         page.update()
 
-        response = response_engine.respond(
-            message,
-            RUBY_PROMPT,
-        )
+        response = response_engine.respond(message, RUBY_PROMPT)
 
         status.value = "🧠 Ruby is ready."
-
         add_message("Ruby", response)
 
     # ----------------------------------------
