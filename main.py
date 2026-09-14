@@ -1,6 +1,3 @@
-# main.py - Ruby V0.2
-# Uses: LocalBrain (prompt template) → ResponseEngine (router) → RUBY_PROMPT (personality)
-
 import flet as ft
 
 from brain.local_brain import LocalBrain
@@ -9,20 +6,12 @@ from prompts.ruby_prompt import RUBY_PROMPT
 
 
 def main(page: ft.Page):
-    page.title = "Ruby v0.2"
+    page.title = "Ruby v0.1"
     page.padding = 10
-    page.theme_mode = ft.ThemeMode.DARK
-    page.bgcolor = "#101014"
 
-    # ----------------------------------------
-    # Core
-    # ----------------------------------------
     brain = LocalBrain()
     response_engine = ResponseEngine(brain)
 
-    # ----------------------------------------
-    # UI Elements
-    # ----------------------------------------
     chat = ft.Column(
         expand=True,
         scroll=ft.ScrollMode.AUTO,
@@ -30,26 +19,19 @@ def main(page: ft.Page):
     )
 
     status = ft.Text(
-        "🧠 Ruby's brain is not loaded.",
-        color=ft.Colors.GREY_400,
-        size=12,
+        "🧠 Ruby's brain is not loaded."
     )
 
-    def add_message(sender, message, is_user=False):
-        color = ft.Colors.CYAN_400 if is_user else ft.Colors.PINK_400
+    def add_message(sender, message):
         chat.controls.append(
             ft.Text(
                 f"{sender}: {message}",
                 selectable=True,
                 size=16,
-                color=color,
             )
         )
         page.update()
 
-    # ----------------------------------------
-    # File Picker (load GGUF)
-    # ----------------------------------------
     def handle_model_result(e: ft.FilePickerResultEvent):
         if not e.files:
             status.value = "No model selected."
@@ -57,6 +39,7 @@ def main(page: ft.Page):
             return
 
         selected = e.files[0]
+
         status.value = f"🧠 Loading {selected.name}..."
         page.update()
 
@@ -68,16 +51,20 @@ def main(page: ft.Page):
         success = brain.load_model(selected.path)
 
         if success:
-            status.value = "🧠 TinyLlama loaded. Ruby is awake!"
+            status.value = "🧠 Qwen2.5 loaded. Ruby is awake!"
+
             add_message(
                 "Ruby",
                 "Hyy Addie 😌 I'm awake! My brain is loaded.",
             )
         else:
-            status.value = "❌ TinyLlama failed to load."
+            status.value = "❌ Qwen2.5 failed to load."
             page.update()
 
-    file_picker = ft.FilePicker(on_result=handle_model_result)
+    file_picker = ft.FilePicker(
+        on_result=handle_model_result
+    )
+
     page.overlay.append(file_picker)
 
     def choose_model(e):
@@ -86,9 +73,6 @@ def main(page: ft.Page):
             file_type=ft.FilePickerFileType.ANY,
         )
 
-    # ----------------------------------------
-    # Send Message
-    # ----------------------------------------
     def send_message(e):
         message = message_box.value.strip()
 
@@ -96,36 +80,40 @@ def main(page: ft.Page):
             return
 
         message_box.value = ""
-        add_message("You", message, is_user=True)
+
+        add_message("You", message)
 
         if not brain.is_loaded():
-            add_message("Ruby", "Load my TinyLlama brain first 😭")
+            add_message(
+                "Ruby",
+                "Load my Qwen2.5 brain first 😭",
+            )
             return
 
         status.value = "💭 Ruby is thinking..."
         page.update()
 
-        response = response_engine.respond(message, RUBY_PROMPT)
+        response = response_engine.respond(
+            message,
+            RUBY_PROMPT,
+        )
 
         status.value = "🧠 Ruby is ready."
-        add_message("Ruby", response)
 
-    # ----------------------------------------
-    # Input Row
-    # ----------------------------------------
+        add_message(
+            "Ruby",
+            response,
+        )
+
     message_box = ft.TextField(
         hint_text="Talk to Ruby...",
         expand=True,
         multiline=False,
         on_submit=send_message,
-        bgcolor="#18181C",
-        color=ft.Colors.WHITE,
-        border_color="#3A3A46",
-        focused_border_color=ft.Colors.PINK_400,
     )
 
     load_button = ft.ElevatedButton(
-        text="🧠 Load TinyLlama",
+        text="🧠 Load Qwen2.5",
         icon=ft.Icons.UPLOAD_FILE,
         on_click=choose_model,
     )
@@ -133,18 +121,13 @@ def main(page: ft.Page):
     send_button = ft.IconButton(
         icon=ft.Icons.SEND,
         on_click=send_message,
-        icon_color=ft.Colors.PINK_400,
     )
 
-    # ----------------------------------------
-    # Layout
-    # ----------------------------------------
     page.add(
         ft.Text(
             "Ruby",
             size=30,
             weight=ft.FontWeight.BOLD,
-            color=ft.Colors.PINK_400,
         ),
         status,
         ft.Divider(),
@@ -158,7 +141,10 @@ def main(page: ft.Page):
         ),
     )
 
-    add_message("Ruby", "Hyy Addie 👀 Load my TinyLlama brain.")
+    add_message(
+        "Ruby",
+        "Hyy Addie 👀 Load my Qwen2.5 brain.",
+    )
 
 
 if __name__ == "__main__":
