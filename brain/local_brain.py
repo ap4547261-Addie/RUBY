@@ -21,7 +21,9 @@ class LocalBrain:
             return True
 
         except Exception as error:
-            print(f"❌ TinyLlama loading failed: {error}")
+            print(
+                f"❌ TinyLlama loading failed: {error}"
+            )
 
             self.model = None
             return False
@@ -29,25 +31,43 @@ class LocalBrain:
     def is_loaded(self) -> bool:
         return self.model is not None
 
-    def generate(self, prompt: str) -> str:
+    def generate(
+        self,
+        ruby_prompt: str,
+        user_message: str,
+    ) -> str:
+
         if self.model is None:
-            return "I don't have my brain loaded yet. 😭"
+            return (
+                "I don't have my brain loaded yet. 😭"
+            )
 
         try:
             result = self.model.create_chat_completion(
                 messages=[
                     {
                         "role": "system",
-                        "content": prompt,
-                    }
+                        "content": ruby_prompt,
+                    },
+                    {
+                        "role": "user",
+                        "content": user_message,
+                    },
                 ],
                 max_tokens=256,
                 temperature=0.7,
             )
 
-            return result["choices"][0]["message"]["content"].strip()
+            return (
+                result["choices"][0]["message"]["content"]
+                .strip()
+            )
 
         except Exception as error:
-            print(f"❌ Generation error: {error}")
+            print(
+                f"❌ Generation error: {error}"
+            )
 
-            return "My brain glitched for a moment. 😭"
+            return (
+                "My brain glitched for a moment. 😭"
+            )
