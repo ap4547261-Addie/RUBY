@@ -10,61 +10,37 @@ class LocalBrain:
         try:
             self.model = Llama(
                 model_path=model_path,
-                n_ctx=4096,
+                n_ctx=2048,
                 n_threads=4,
                 verbose=False,
             )
-
             self.model_path = model_path
-
-            print("✅ Qwen2.5 loaded.")
+            print("✅ Model loaded.")
             return True
-
         except Exception as error:
-            print(f"❌ Qwen2.5 loading failed: {error}")
-
+            print(f"❌ Model loading failed: {error}")
             self.model = None
             return False
 
     def is_loaded(self) -> bool:
         return self.model is not None
 
-    def generate(
-        self,
-        ruby_prompt: str,
-        user_message: str,
-    ) -> str:
-
+    def generate(self, ruby_prompt: str, user_message: str) -> str:
         if self.model is None:
             return "I don't have my brain loaded yet. 😭"
 
         try:
-            prompt = (
-                "<|im_start|>system\n"
-                f"{ruby_prompt}"
-                "<|im_end|>\n"
-                "<|im_start|>user\n"
-                f"{user_message}"
-                "<|im_end|>\n"
-                "<|im_start|>assistant\n"
-            )
-
-            result = self.model(
-                prompt,
-                max_tokens=128,
-                temperature=0.7,
-                top_p=0.8,
-                stop=[
-                    "<|im_end|>",
-                    "<|im_start|>",
+            result = self.model.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": ruby_prompt},
+                    {"role": "user", "content": user_message},
                 ],
+                max_tokens=150,
+                temperature=0.7,
+                top_p=0.9,
             )
-
-            response = result["choices"][0]["text"].strip()
-
-            return response
+            return result["choices"][0]["message"]["content"].strip()
 
         except Exception as error:
             print(f"❌ Generation error: {error}")
-
             return "My brain glitched for a moment. 😭"
