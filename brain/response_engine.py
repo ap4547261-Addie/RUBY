@@ -1,25 +1,44 @@
 from memory.short_term import ShortTermMemory
+from memory.long_term import LongTermMemory
 
 
 class ResponseEngine:
-    def __init__(self, brain, short_term: ShortTermMemory = None):
+    def __init__(self, brain):
         self.brain = brain
-        self.memory = short_term or ShortTermMemory(max_messages=10)
+        self.short_term = ShortTermMemory(max_messages=10)
+        self.long_term = LongTermMemory()
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
-        # Build full message list: system + history + new user message
-        messages = [{"role": "system", "content": ruby_prompt}]
-        messages.extend(self.memory.get_messages())
+        # 1. Get relevant long-term memory context
+        memory_context = self.long_term.get_relevant_context(
+            user_message, limit=3
+        )
+
+        # 2. Inject into the system prompt
+        system_content = ruby_prompt
+        if memory_context:
+            system_content = f"{ruby_prompt}\n\n{memory_context}"
+
+        # 3. Build full message list
+        messages = [{"role": "system", "content": system_content}]
+        messages.extend(self.short_term.get_messages())
         messages.append({"role": "user", "content": user_message})
 
-        # Generate reply using the full conversation
+        # 4. Generate
         reply = self.brain.generate(messages)
 
-        # Store both messages in short-term memory
-        self.memory.add("user", user_message)
-        self.memory.add("assistant", reply)
+        # 5. Save to short-term (immediate context)
+        self.short_term.add("user", user_message)
+        self.short_term.add("assistant", reply)
+
+        # 6. Save to long-term (persists across restarts)
+        self.long_term.remember(user_message, reply)
 
         return reply
 
     def clear_history(self):
-        self.memory.clear()
+        self.short_term.clear()
+
+    def wipe_long_term(self):
+        self.long_term.wipe()
+        self.short_term.clear()
