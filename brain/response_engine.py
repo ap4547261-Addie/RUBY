@@ -4,5 +4,6 @@ class ResponseEngine:
 
     def respond(self, user_message: str, ruby_prompt: str):
         return self.brain.generate(
-            f"{ruby_prompt}\n\nUser message:\n{user_message}"
+            ruby_prompt,
+            user_message,
         )
