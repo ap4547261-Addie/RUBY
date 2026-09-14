@@ -4,7 +4,7 @@ import flet as ft
 
 from brain.local_brain import LocalBrain
 from brain.response_engine import ResponseEngine
-from personality.ruby import RUBY_PROMPT
+from prompts.ruby_prompt import RUBY_PROMPT
 from settings.settings_manager import SettingsManager
 
 
