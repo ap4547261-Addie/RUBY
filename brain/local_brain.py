@@ -8,15 +8,50 @@ class LocalBrain:
 
     def load_model(self, model_path: str) -> bool:
         try:
+            print(f"🔄 Loading model from: {model_path}")
+
             self.model = Llama(
                 model_path=model_path,
-                n_ctx=2048,
+                n_ctx=1024,        # reduced from 2048 to save RAM
                 n_threads=4,
-                verbose=False,
+                verbose=True,      # shows detailed loading info
             )
+
             self.model_path = model_path
-            print("✅ Model loaded.")
+            print("✅ Model loaded successfully.")
+
+            # -----------------------------
+            # RAW DIAGNOSTIC TEST
+            # -----------------------------
+            try:
+                test = self.model(
+                    "The capital of France is",
+                    max_tokens=10,
+                    echo=False,
+                )
+                raw_output = test["choices"][0]["text"]
+                print(f"🧪 RAW TEST OUTPUT: {repr(raw_output)}")
+            except Exception as test_err:
+                print(f"🧪 RAW TEST FAILED: {test_err}")
+
+            # -----------------------------
+            # CHAT TEMPLATE TEST
+            # -----------------------------
+            try:
+                chat_test = self.model.create_chat_completion(
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": "Say hello."},
+                    ],
+                    max_tokens=20,
+                )
+                chat_output = chat_test["choices"][0]["message"]["content"]
+                print(f"🧪 CHAT TEST OUTPUT: {repr(chat_output)}")
+            except Exception as chat_err:
+                print(f"🧪 CHAT TEST FAILED: {chat_err}")
+
             return True
+
         except Exception as error:
             print(f"❌ Model loading failed: {error}")
             self.model = None
