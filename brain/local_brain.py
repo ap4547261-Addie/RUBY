@@ -12,44 +12,13 @@ class LocalBrain:
 
             self.model = Llama(
                 model_path=model_path,
-                n_ctx=1024,        # reduced from 2048 to save RAM
+                n_ctx=1024,
                 n_threads=4,
-                verbose=True,      # shows detailed loading info
+                verbose=False,
             )
 
             self.model_path = model_path
             print("✅ Model loaded successfully.")
-
-            # -----------------------------
-            # RAW DIAGNOSTIC TEST
-            # -----------------------------
-            try:
-                test = self.model(
-                    "The capital of France is",
-                    max_tokens=10,
-                    echo=False,
-                )
-                raw_output = test["choices"][0]["text"]
-                print(f"🧪 RAW TEST OUTPUT: {repr(raw_output)}")
-            except Exception as test_err:
-                print(f"🧪 RAW TEST FAILED: {test_err}")
-
-            # -----------------------------
-            # CHAT TEMPLATE TEST
-            # -----------------------------
-            try:
-                chat_test = self.model.create_chat_completion(
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant."},
-                        {"role": "user", "content": "Say hello."},
-                    ],
-                    max_tokens=20,
-                )
-                chat_output = chat_test["choices"][0]["message"]["content"]
-                print(f"🧪 CHAT TEST OUTPUT: {repr(chat_output)}")
-            except Exception as chat_err:
-                print(f"🧪 CHAT TEST FAILED: {chat_err}")
-
             return True
 
         except Exception as error:
@@ -60,16 +29,14 @@ class LocalBrain:
     def is_loaded(self) -> bool:
         return self.model is not None
 
-    def generate(self, ruby_prompt: str, user_message: str) -> str:
+    def generate(self, messages: list) -> str:
+        """Generate a reply from a full messages list (system + history + user)."""
         if self.model is None:
             return "I don't have my brain loaded yet. 😭"
 
         try:
             result = self.model.create_chat_completion(
-                messages=[
-                    {"role": "system", "content": ruby_prompt},
-                    {"role": "user", "content": user_message},
-                ],
+                messages=messages,
                 max_tokens=150,
                 temperature=0.7,
                 top_p=0.9,
