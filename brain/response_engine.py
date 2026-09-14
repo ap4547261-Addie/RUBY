@@ -3,13 +3,6 @@ class ResponseEngine:
         self.brain = brain
 
     def respond(self, user_message: str, ruby_prompt: str):
-        prompt = f"""
-{ruby_prompt}
-
-User:
-{user_message}
-
-Ruby:
-"""
-
-        return self.brain.generate(prompt)
+        return self.brain.generate(
+            f"{ruby_prompt}\n\nUser message:\n{user_message}"
+        )
