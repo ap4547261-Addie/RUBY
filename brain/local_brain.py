@@ -30,28 +30,18 @@ class LocalBrain:
             return "I don't have my brain loaded yet. 😭"
 
         try:
-            prompt = (
-                "<|system|>\n"
-                f"{ruby_prompt}</s>\n"
-                "<|user|>\n"
-                f"{user_message}</s>\n"
-                "<|assistant|>\n"
-            )
-
-            result = self.model(
-                prompt,
+            # Use llama-cpp's native chat template
+            result = self.model.create_chat_completion(
+                messages=[
+                    {"role": "system", "content": ruby_prompt},
+                    {"role": "user", "content": user_message},
+                ],
                 max_tokens=128,
                 temperature=0.7,
                 top_p=0.95,
-                echo=False,
-                stop=[
-                    "</s>",
-                    "<|user|>",
-                    "<|system|>",
-                ],
             )
 
-            response = result["choices"][0]["text"].strip()
+            response = result["choices"][0]["message"]["content"].strip()
             return response
 
         except Exception as error:
