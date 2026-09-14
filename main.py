@@ -1,4 +1,4 @@
-# main.py - Ruby with Settings
+# main.py - Ruby with Settings + Backup
 
 import flet as ft
 
@@ -27,11 +27,19 @@ def main(page: ft.Page):
     chat = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO, spacing=10)
     status = ft.Text("🧠 Ruby's brain is not loaded.", color=ft.Colors.GREY_400, size=12)
 
+    # Tracks what the file picker should do next
+    file_picker_mode = {"action": None}
+
     def add_message(sender, message, is_user=False):
         color = ft.Colors.CYAN_400 if is_user else ft.Colors.PINK_400
         chat.controls.append(
             ft.Text(f"{sender}: {message}", selectable=True, size=16, color=color)
         )
+        page.update()
+
+    def show_snack(text):
+        page.snack_bar = ft.SnackBar(ft.Text(text))
+        page.snack_bar.open = True
         page.update()
 
     # ----------------------------------------
@@ -51,15 +59,32 @@ def main(page: ft.Page):
             status.value = f"❌ Failed to load {name}"
             page.update()
 
+    # ----------------------------------------
+    # File Picker (handles both .gguf and .json)
+    # ----------------------------------------
     def handle_file_pick(e: ft.FilePickerResultEvent):
         if not e.files:
             return
+
         f = e.files[0]
         if not f.path:
             status.value = "❌ No file path provided."
             page.update()
             return
-        load_model(f.path, f.name)
+
+        action = file_picker_mode.get("action")
+
+        if action == "model":
+            load_model(f.path, f.name)
+
+        elif action == "import_backup":
+            ok = settings.import_backup(f.path)
+            if ok:
+                show_snack("✅ Backup imported. Restart the app to apply.")
+            else:
+                show_snack("❌ Backup import failed.")
+
+        file_picker_mode["action"] = None
 
     file_picker = ft.FilePicker(on_result=handle_file_pick)
     page.overlay.append(file_picker)
@@ -68,7 +93,7 @@ def main(page: ft.Page):
     # Settings Dialog
     # ----------------------------------------
     def open_settings(e):
-        # Account
+        # --- Account fields ---
         name_field = ft.TextField(
             label="Name",
             value=settings.get("user_name", ""),
@@ -87,7 +112,7 @@ def main(page: ft.Page):
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
-        # Brain
+        # --- Brain fields ---
         model_name_label = ft.Text(
             settings.get("model_name") or "No model selected",
             size=13, color=ft.Colors.GREY_400,
@@ -105,8 +130,17 @@ def main(page: ft.Page):
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
+        # --- Backup label ---
+        last_backup = settings.get("last_backup") or "Never"
+        backup_label = ft.Text(
+            f"Last backup: {last_backup}",
+            size=12, color=ft.Colors.GREY_400,
+        )
+
+        # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
+            file_picker_mode["action"] = "model"
             file_picker.pick_files(
                 allow_multiple=False,
                 file_type=ft.FilePickerFileType.ANY,
@@ -130,6 +164,24 @@ def main(page: ft.Page):
             page.close(settings_dialog)
             page.update()
 
+        def do_export(ev):
+            path = settings.export_backup()
+            if path:
+                backup_label.value = f"✅ Saved: {path}"
+                show_snack("✅ Backup exported to Downloads/ruby_backups/")
+            else:
+                backup_label.value = "❌ Export failed"
+            page.update()
+
+        def do_import(ev):
+            page.close(settings_dialog)
+            file_picker_mode["action"] = "import_backup"
+            file_picker.pick_files(
+                allow_multiple=False,
+                file_type=ft.FilePickerFileType.ANY,
+            )
+
+        # --- Dialog ---
         settings_dialog = ft.AlertDialog(
             title=ft.Text("⚙️ Settings"),
             content=ft.Column(
@@ -139,7 +191,7 @@ def main(page: ft.Page):
                     name_field,
                     phone_field,
                     email_field,
-                    ft.ElevatedButton("🔐 Sign in with Google", disabled=True, width=320),
+                    ft.ElevatedButton("🔐 Sign in with Google", disabled=True, width=340),
                     ft.Divider(),
 
                     # --- Brain ---
@@ -149,10 +201,30 @@ def main(page: ft.Page):
                         "Choose Model File",
                         icon=ft.Icons.UPLOAD_FILE,
                         on_click=pick_model,
-                        width=320,
+                        width=340,
                     ),
                     context_field,
                     threads_field,
+                    ft.Divider(),
+
+                    # --- Backup ---
+                    ft.Text("💾 Backup", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
+                    backup_label,
+                    ft.Row(
+                        [
+                            ft.ElevatedButton(
+                                "Export",
+                                icon=ft.Icons.DOWNLOAD,
+                                on_click=do_export,
+                            ),
+                            ft.ElevatedButton(
+                                "Import",
+                                icon=ft.Icons.UPLOAD,
+                                on_click=do_import,
+                            ),
+                        ],
+                        alignment=ft.MainAxisAlignment.START,
+                    ),
                     ft.Divider(),
 
                     # --- Integrations ---
@@ -160,7 +232,10 @@ def main(page: ft.Page):
                     ft.Text("Pinecone: Not connected", size=13, color=ft.Colors.GREY_400),
                     ft.Text("Instagram: Not connected", size=13, color=ft.Colors.GREY_400),
                 ],
-                tight=True, spacing=10, width=340, scroll=ft.ScrollMode.AUTO,
+                tight=True,
+                spacing=10,
+                width=360,
+                scroll=ft.ScrollMode.AUTO,
             ),
             actions=[
                 ft.TextButton("Save", on_click=save_and_close),
@@ -176,6 +251,7 @@ def main(page: ft.Page):
         msg = message_box.value.strip()
         if not msg:
             return
+
         message_box.value = ""
         add_message("You", msg, is_user=True)
 
@@ -185,7 +261,9 @@ def main(page: ft.Page):
 
         status.value = "💭 Ruby is thinking..."
         page.update()
+
         reply = response_engine.respond(msg, RUBY_PROMPT)
+
         status.value = "🧠 Ruby is ready."
         add_message("Ruby", reply)
 
@@ -193,16 +271,27 @@ def main(page: ft.Page):
     # Layout
     # ----------------------------------------
     message_box = ft.TextField(
-        hint_text="Talk to Ruby...", expand=True, multiline=False,
-        on_submit=send_message, bgcolor="#18181C", color=ft.Colors.WHITE,
-        border_color="#3A3A46", focused_border_color=ft.Colors.PINK_400,
+        hint_text="Talk to Ruby...",
+        expand=True,
+        multiline=False,
+        on_submit=send_message,
+        bgcolor="#18181C",
+        color=ft.Colors.WHITE,
+        border_color="#3A3A46",
+        focused_border_color=ft.Colors.PINK_400,
     )
+
     settings_button = ft.IconButton(
-        icon=ft.Icons.SETTINGS, on_click=open_settings,
-        icon_color=ft.Colors.GREY_400, tooltip="Settings",
+        icon=ft.Icons.SETTINGS,
+        on_click=open_settings,
+        icon_color=ft.Colors.GREY_400,
+        tooltip="Settings",
     )
+
     send_button = ft.IconButton(
-        icon=ft.Icons.SEND, on_click=send_message, icon_color=ft.Colors.PINK_400,
+        icon=ft.Icons.SEND,
+        on_click=send_message,
+        icon_color=ft.Colors.PINK_400,
     )
 
     page.add(
