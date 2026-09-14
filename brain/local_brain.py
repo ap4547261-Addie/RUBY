@@ -32,33 +32,23 @@ class LocalBrain:
         return self.model is not None
 
     def generate(self, prompt: str) -> str:
-        if self.model is None:
-            return (
-                "I don't have my brain loaded yet. 😭"
-            )
+    if self.model is None:
+        return "I don't have my brain loaded yet. 😭"
 
-        try:
-            result = self.model.create_chat_completion(
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                ],
-                max_tokens=256,
-                temperature=0.7,
-            )
+    try:
+        result = self.model.create_chat_completion(
+            messages=[
+                {
+                    "role": "system",
+                    "content": prompt,
+                },
+            ],
+            max_tokens=256,
+            temperature=0.7,
+        )
 
-            return (
-                result["choices"][0]["message"]["content"]
-                .strip()
-            )
+        return result["choices"][0]["message"]["content"].strip()
 
-        except Exception as error:
-            print(
-                f"❌ Generation error: {error}"
-            )
-
-            return (
-                "My brain glitched for a moment. 😭"
-            )
+    except Exception as error:
+        print(f"❌ Generation error: {error}")
+        return "My brain glitched for a moment. 😭"
