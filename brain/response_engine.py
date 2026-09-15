@@ -3,7 +3,7 @@ from memory.memory_consolidation import MemoryConsolidation
 
 
 class ResponseEngine:
-    def __init__(self, brain, user_name="Addie"):
+    def __init__(self, brain, user_name="not_set"):
         self.brain = brain
         self.user_name = user_name
         self.short_term = ShortTermMemory(max_messages=10)
