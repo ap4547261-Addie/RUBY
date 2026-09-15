@@ -1,4 +1,5 @@
 import re
+from memory import database
 from memory.episodic_memory import EpisodicMemory
 from memory.semantic_memory import SemanticMemory
 from memory.relationship_memory import RelationshipMemory
@@ -7,6 +8,9 @@ from memory.relationship_memory import RelationshipMemory
 class MemoryConsolidation:
 
     def __init__(self, user_name="Addie"):
+        # Ensure all tables exist BEFORE creating any memory objects
+        database.init_db()
+
         self.user_name = user_name
         self.episodic = EpisodicMemory()
         self.semantic = SemanticMemory()
