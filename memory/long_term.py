@@ -3,6 +3,8 @@ from memory import database
 
 
 class LongTermMemory:
+    """Persistent memory via SQLite."""
+
     def __init__(self):
         database.init_db()
 
@@ -18,6 +20,7 @@ class LongTermMemory:
         )
 
     def get_relevant_context(self, user_message, limit=3) -> str:
+        """Return a short text block of relevant past memories."""
         keywords = [w for w in user_message.lower().split() if len(w) >= 4]
         found = []
 
@@ -27,16 +30,14 @@ class LongTermMemory:
                 if row not in found:
                     found.append(row)
 
-        if not found:
-            found = database.get_recent(limit=limit)
-
+        # If nothing relevant found, don't inject random old chats
         if not found:
             return ""
 
         lines = []
         for user_msg, ruby_reply, ts in found:
-            lines.append(f"- Addie said: {user_msg}")
-            lines.append(f"  Ruby replied: {ruby_reply}")
+            lines.append(f"- they said: {user_msg}")
+            lines.append(f"  you replied: {ruby_reply}")
 
         return "\n".join(lines)
 
