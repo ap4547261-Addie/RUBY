@@ -13,6 +13,7 @@ def init_db():
     conn = get_connection()
     c = conn.cursor()
 
+    # -------- Episodes: raw conversations --------
     c.execute("""
         CREATE TABLE IF NOT EXISTS episodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,6 +24,7 @@ def init_db():
         )
     """)
 
+    # -------- Facts: semantic memory about the user --------
     c.execute("""
         CREATE TABLE IF NOT EXISTS facts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,16 +36,23 @@ def init_db():
         )
     """)
 
+    # -------- Relationship: continuous emotional dimensions --------
+    # trust, familiarity, attachment, respect = REAL numbers, grow forever.
     c.execute("""
         CREATE TABLE IF NOT EXISTS relationship (
             id INTEGER PRIMARY KEY,
-            user_name TEXT NOT NULL,
+            user_name TEXT UNIQUE NOT NULL,
             message_count INTEGER DEFAULT 0,
-            trust_level INTEGER DEFAULT 0,
-            mood TEXT DEFAULT 'guarded',
+            trust REAL DEFAULT 0.0,
+            familiarity REAL DEFAULT 0.0,
+            attachment REAL DEFAULT 0.0,
+            respect REAL DEFAULT 0.0,
             last_updated TEXT
         )
     """)
+
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ep_ts ON episodes(timestamp DESC)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fact_sub ON facts(subject)")
 
     conn.commit()
     conn.close()
