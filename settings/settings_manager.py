@@ -11,7 +11,7 @@ DEFAULT_SETTINGS = {
     # -------------------------
     # Account
     # -------------------------
-    "user_name": "Addie",
+    "user_name": "not_set",
     "user_phone": "",
     "user_email": "",
     "user_logged_in": False,
