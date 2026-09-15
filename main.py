@@ -20,7 +20,6 @@ def main(page: ft.Page):
     brain = LocalBrain()
     settings = SettingsManager()
 
-    # initialize ResponseEngine with the user's name from settings
     user_name = settings.get("user_name", "Addie") or "Addie"
     response_engine = ResponseEngine(brain, user_name=user_name)
 
@@ -138,19 +137,25 @@ def main(page: ft.Page):
             size=12, color=ft.Colors.GREY_400,
         )
 
-        # --- Memory stats (V0.4) ---
+        # --- Memory stats (V0.4 - open evolution) ---
         try:
             stats = response_engine.memory_stats()
             rel = stats["relationship"]
             mem_episodes = ft.Text(f"Episodes stored: {stats['episodes']}", size=12, color=ft.Colors.GREY_400)
             mem_facts = ft.Text(f"Facts learned: {stats['facts']}", size=12, color=ft.Colors.GREY_400)
             mem_msgs = ft.Text(f"Messages exchanged: {rel['message_count']}", size=12, color=ft.Colors.GREY_400)
-            mem_mood = ft.Text(f"Trust: {rel['trust_level']}  •  Mood: {rel['mood']}", size=12, color=ft.Colors.GREY_400)
+            mem_trust = ft.Text(f"Trust: {rel['trust']}", size=12, color=ft.Colors.GREY_400)
+            mem_fam = ft.Text(f"Familiarity: {rel['familiarity']}", size=12, color=ft.Colors.GREY_400)
+            mem_resp = ft.Text(f"Respect: {rel['respect']}", size=12, color=ft.Colors.GREY_400)
+            mem_att = ft.Text(f"Attachment: {rel['attachment']}", size=12, color=ft.Colors.GREY_400)
         except Exception as ex:
             mem_episodes = ft.Text(f"Memory unavailable: {ex}", size=12, color=ft.Colors.RED_300)
             mem_facts = ft.Text("", size=12)
             mem_msgs = ft.Text("", size=12)
-            mem_mood = ft.Text("", size=12)
+            mem_trust = ft.Text("", size=12)
+            mem_fam = ft.Text("", size=12)
+            mem_resp = ft.Text("", size=12)
+            mem_att = ft.Text("", size=12)
 
         # --- Actions ---
         def pick_model(ev):
@@ -202,7 +207,10 @@ def main(page: ft.Page):
                 mem_episodes.value = "Episodes stored: 0"
                 mem_facts.value = "Facts learned: 0"
                 mem_msgs.value = "Messages exchanged: 0"
-                mem_mood.value = "Trust: 0  •  Mood: guarded"
+                mem_trust.value = "Trust: 0"
+                mem_fam.value = "Familiarity: 0"
+                mem_resp.value = "Respect: 0"
+                mem_att.value = "Attachment: 0"
                 show_snack("🗑️ All memory wiped.")
             except Exception as ex:
                 show_snack(f"❌ Wipe failed: {ex}")
@@ -239,7 +247,10 @@ def main(page: ft.Page):
                     mem_episodes,
                     mem_facts,
                     mem_msgs,
-                    mem_mood,
+                    mem_trust,
+                    mem_fam,
+                    mem_resp,
+                    mem_att,
                     ft.ElevatedButton(
                         "Wipe All Memory",
                         icon=ft.Icons.DELETE_FOREVER,
