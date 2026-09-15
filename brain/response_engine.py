@@ -8,36 +8,46 @@ class ResponseEngine:
         self.short_term = ShortTermMemory(max_messages=10)
         self.long_term = LongTermMemory()
 
-    def respond(self, user_message: str, ruby_prompt: str, user_name: str = "Addie") -> str:
-        # --- Get long-term memory as a natural note ---
-        memory_block = self.long_term.get_relevant_context(user_message, limit=3)
+    def respond(self, user_message: str, ruby_prompt: str,
+                user_name: str = "Addie") -> str:
+        # --- Long-term context (if any memories match) ---
+        memory_block = self.long_term.get_relevant_context(
+            user_message, limit=3
+        )
 
-        # --- Combine description + memory into one "who Ruby is right now" block ---
         description = ruby_prompt
         if memory_block:
-            description = f"{ruby_prompt}\n\nThings Ruby remembers:\n{memory_block}"
+            description = (
+                f"{ruby_prompt}\n\n"
+                f"Things Ruby remembers about {user_name}:\n{memory_block}"
+            )
 
-        # --- Add the new user message to short-term history ---
+        # --- Add new user message to short-term history ---
         self.short_term.add("user", user_message)
 
-        # --- Generate ---
+        # --- Generate reply (transcript mode) ---
         reply = self.brain.generate(
             description=description,
             history=self.short_term.get_messages(),
             user_name=user_name,
         )
 
-        # --- Store the reply ---
+        # --- Store reply in short-term ---
         self.short_term.add("assistant", reply)
 
-        # --- Persist to long-term memory ---
+        # --- Persist both sides in SQLite ---
         self.long_term.remember(user_message, reply)
 
         return reply
 
-    def clear_history(self):
+    def clear_short_term(self):
+        """Wipes the current session only."""
         self.short_term.clear()
 
-    def wipe_long_term(self):
-        self.long_term.wipe()
+    def wipe_all_memory(self):
+        """Wipes everything — short-term AND long-term."""
         self.short_term.clear()
+        self.long_term.wipe()
+
+    def memory_count(self) -> int:
+        return self.long_term.count()
