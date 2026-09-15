@@ -20,7 +20,7 @@ def main(page: ft.Page):
     brain = LocalBrain()
     settings = SettingsManager()
 
-    user_name = settings.get("user_name", "Addie") or "Addie"
+    user_name = settings.get("user_name", "not_set") 
     response_engine = ResponseEngine(brain, user_name=user_name)
 
     # ----------------------------------------
