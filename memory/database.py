@@ -10,10 +10,8 @@ def get_connection():
 
 
 def init_db():
-    """Create tables if they don't exist."""
     conn = get_connection()
     c = conn.cursor()
-
     c.execute("""
         CREATE TABLE IF NOT EXISTS memories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,19 +22,17 @@ def init_db():
             importance INTEGER DEFAULT 3
         )
     """)
-
     c.execute("""
         CREATE INDEX IF NOT EXISTS idx_timestamp
         ON memories (timestamp DESC)
     """)
-
     conn.commit()
     conn.close()
     print("✅ Memory database initialized.")
 
 
-def insert_memory(user_message: str, ruby_reply: str, timestamp: str,
-                  category: str = "conversation", importance: int = 3):
+def insert_memory(user_message, ruby_reply, timestamp,
+                  category="conversation", importance=3):
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -50,8 +46,7 @@ def insert_memory(user_message: str, ruby_reply: str, timestamp: str,
     conn.close()
 
 
-def get_recent(limit: int = 5):
-    """Return the most recent N memory pairs."""
+def get_recent(limit=5):
     conn = get_connection()
     c = conn.cursor()
     c.execute(
@@ -68,11 +63,9 @@ def get_recent(limit: int = 5):
     return rows
 
 
-def search_by_keyword(keyword: str, limit: int = 5):
-    """Simple keyword search across user messages and replies."""
+def search_by_keyword(keyword, limit=5):
     if not keyword or len(keyword) < 3:
         return []
-
     conn = get_connection()
     c = conn.cursor()
     like = f"%{keyword.lower()}%"
@@ -91,7 +84,7 @@ def search_by_keyword(keyword: str, limit: int = 5):
     return rows
 
 
-def count_memories() -> int:
+def count_memories():
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM memories")
