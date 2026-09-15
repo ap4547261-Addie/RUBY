@@ -15,11 +15,17 @@ class MemoryConsolidation:
         self.relationship = RelationshipMemory(user_name=user_name)
 
     # -------------------------
+    # Display name
+    # -------------------------
+    def _display_name(self):
+        """Turn 'not_set' into a natural phrase for the prompt."""
+        if not self.user_name or self.user_name == "not_set":
+            return "the stranger"
+        return self.user_name
+
+    # -------------------------
     # Signal detection
     # -------------------------
-    def _has_question(self, text):
-        return "?" in text
-
     def _is_long_message(self, text, words=12):
         return len(text.split()) >= words
 
@@ -47,12 +53,11 @@ class MemoryConsolidation:
 
     def _is_rude(self, text):
         t = text.lower()
-        rude_markers = [
+        return any(m in t for m in [
             "shut up", "stupid", "dumb", "idiot",
             "you're useless", "you are useless",
             "do it now", "obey", "command",
-        ]
-        return any(m in t for m in rude_markers)
+        ])
 
     def _is_pushy(self, text):
         t = text.lower()
@@ -115,18 +120,19 @@ class MemoryConsolidation:
         self.relationship.grow_attachment(0.005)
 
     # -------------------------
-    # Context builder (prose, not instructions)
+    # Context builder (prose, no headers)
     # -------------------------
     def build_context(self, user_message):
         parts = []
+        display = self._display_name()
 
-        # 1. Facts as a quiet note
+        # 1. Facts about the user
         facts = self.semantic.get_all_for(self.user_name)
         if facts:
             fact_bits = [f"{k.replace('_', ' ')} is {v}" for k, v in facts]
-            parts.append(f"You remember: {', '.join(fact_bits)}.")
+            parts.append(f"You remember about {display}: {', '.join(fact_bits)}.")
 
-        # 2. One relevant episode
+        # 2. Relevant past episode
         keywords = [w for w in user_message.lower().split() if len(w) >= 4]
         found = []
         for kw in keywords[:2]:
@@ -135,9 +141,9 @@ class MemoryConsolidation:
                     found.append(row)
         if found:
             u, r, _ = found[0]
-            parts.append(f'You remember him saying "{u}" and you answered "{r}".')
+            parts.append(f'You remember {display} saying "{u}" and you answered "{r}".')
 
-        # 3. Emotional state as a single prose sentence
+        # 3. Emotional state — prose
         s = self.relationship.get_state()
         trust = s["trust"]
         attach = s["attachment"]
@@ -145,18 +151,18 @@ class MemoryConsolidation:
         count = s["message_count"]
 
         if trust < 0.5 and attach < 0.5:
-            mood = "You barely know him. You're guarded and cold."
+            mood = f"You barely know {display}. You're guarded and cold."
         elif trust < 3 and attach < 3:
-            mood = "You're starting to notice him. Still guarded, but a little curious."
+            mood = f"You're starting to notice {display}. Still guarded, but a little curious."
         elif trust < 10 and attach < 10:
-            mood = "You trust him. You can say real things. You're warming up."
+            mood = f"You trust {display}. You can say real things. You're warming up."
         else:
-            mood = "You're deeply attached to him. You love him, though it's hard to show."
+            mood = f"You're deeply attached to {display}. You love them, though it's hard to show."
 
         if respect > 3:
-            mood += " You respect him. You take him seriously."
+            mood += f" You respect {display}. You take them seriously."
         elif respect < -1:
-            mood += " You've lost some respect for him."
+            mood += f" You've lost some respect for {display}."
 
         parts.append(f"{mood} (exchanged {count} messages so far)")
 
