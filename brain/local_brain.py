@@ -27,39 +27,48 @@ class LocalBrain:
         return self.model is not None
 
     def generate(self, description: str, history: list, user_name: str = "Addie") -> str:
-        """
-        Builds a raw transcript and lets the model continue it as Ruby.
-        No system prompt, no assistant role — just a conversation.
-        """
         if self.model is None:
             return "My brain isn't loaded yet."
 
-        # --- Build transcript ---
-        lines = [description.strip(), ""]
+        # --- Build transcript with clear scene boundaries ---
+        lines = []
+        lines.append("### SCENE ###")
+        lines.append(description.strip())
+        lines.append("### END SCENE ###")
+        lines.append("")
+        lines.append("### CHAT LOG ###")
 
         for msg in history:
             speaker = user_name if msg["role"] == "user" else "Ruby"
             lines.append(f"{speaker}: {msg['content']}")
 
         lines.append("Ruby:")
+
         prompt = "\n".join(lines)
 
         try:
             result = self.model(
                 prompt,
-                max_tokens=80,
+                max_tokens=60,
                 temperature=0.85,
                 top_p=0.9,
-                repeat_penalty=1.3,
-                frequency_penalty=0.4,
+                repeat_penalty=1.4,
+                frequency_penalty=0.6,
+                presence_penalty=0.4,
                 echo=False,
-                stop=[f"{user_name}:", "\n\n\n"],
+                stop=[
+                    f"{user_name}:",
+                    "###",
+                    "Ruby:",
+                    "\n\n\n",
+                ],
             )
             reply = result["choices"][0]["text"].strip()
 
-            # clean trailing junk
-            if f"{user_name}:" in reply:
-                reply = reply.split(f"{user_name}:")[0].strip()
+            # Strip any leaked prefixes
+            for junk in [f"{user_name}:", "Ruby:", "###"]:
+                if junk in reply:
+                    reply = reply.split(junk)[0].strip()
 
             return reply
         except Exception as error:
