@@ -1,4 +1,4 @@
-# main.py - Ruby with Settings + Backup
+# main.py - Ruby V0.4 (with Memory Consolidation)
 
 import flet as ft
 
@@ -18,8 +18,11 @@ def main(page: ft.Page):
     # Core
     # ----------------------------------------
     brain = LocalBrain()
-    response_engine = ResponseEngine(brain)
     settings = SettingsManager()
+
+    # initialize ResponseEngine with the user's name from settings
+    user_name = settings.get("user_name", "Addie") or "Addie"
+    response_engine = ResponseEngine(brain, user_name=user_name)
 
     # ----------------------------------------
     # UI
@@ -27,7 +30,6 @@ def main(page: ft.Page):
     chat = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO, spacing=10)
     status = ft.Text("🧠 Ruby's brain is not loaded.", color=ft.Colors.GREY_400, size=12)
 
-    # Tracks what the file picker should do next
     file_picker_mode = {"action": None}
 
     def add_message(sender, message, is_user=False):
@@ -60,7 +62,7 @@ def main(page: ft.Page):
             page.update()
 
     # ----------------------------------------
-    # File Picker (handles both .gguf and .json)
+    # File Picker
     # ----------------------------------------
     def handle_file_pick(e: ft.FilePickerResultEvent):
         if not e.files:
@@ -76,7 +78,6 @@ def main(page: ft.Page):
 
         if action == "model":
             load_model(f.path, f.name)
-
         elif action == "import_backup":
             ok = settings.import_backup(f.path)
             if ok:
@@ -137,6 +138,20 @@ def main(page: ft.Page):
             size=12, color=ft.Colors.GREY_400,
         )
 
+        # --- Memory stats (V0.4) ---
+        try:
+            stats = response_engine.memory_stats()
+            rel = stats["relationship"]
+            mem_episodes = ft.Text(f"Episodes stored: {stats['episodes']}", size=12, color=ft.Colors.GREY_400)
+            mem_facts = ft.Text(f"Facts learned: {stats['facts']}", size=12, color=ft.Colors.GREY_400)
+            mem_msgs = ft.Text(f"Messages exchanged: {rel['message_count']}", size=12, color=ft.Colors.GREY_400)
+            mem_mood = ft.Text(f"Trust: {rel['trust_level']}  •  Mood: {rel['mood']}", size=12, color=ft.Colors.GREY_400)
+        except Exception as ex:
+            mem_episodes = ft.Text(f"Memory unavailable: {ex}", size=12, color=ft.Colors.RED_300)
+            mem_facts = ft.Text("", size=12)
+            mem_msgs = ft.Text("", size=12)
+            mem_mood = ft.Text("", size=12)
+
         # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
@@ -160,7 +175,7 @@ def main(page: ft.Page):
                 "context_size": ctx,
                 "threads": thr,
             })
-            status.value = "✅ Settings saved."
+            status.value = "✅ Settings saved. Restart to apply name change."
             page.close(settings_dialog)
             page.update()
 
@@ -180,6 +195,18 @@ def main(page: ft.Page):
                 allow_multiple=False,
                 file_type=ft.FilePickerFileType.ANY,
             )
+
+        def do_wipe_memory(ev):
+            try:
+                response_engine.wipe_all_memory()
+                mem_episodes.value = "Episodes stored: 0"
+                mem_facts.value = "Facts learned: 0"
+                mem_msgs.value = "Messages exchanged: 0"
+                mem_mood.value = "Trust: 0  •  Mood: guarded"
+                show_snack("🗑️ All memory wiped.")
+            except Exception as ex:
+                show_snack(f"❌ Wipe failed: {ex}")
+            page.update()
 
         # --- Dialog ---
         settings_dialog = ft.AlertDialog(
@@ -205,6 +232,20 @@ def main(page: ft.Page):
                     ),
                     context_field,
                     threads_field,
+                    ft.Divider(),
+
+                    # --- Memory (V0.4) ---
+                    ft.Text("💭 Memory", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
+                    mem_episodes,
+                    mem_facts,
+                    mem_msgs,
+                    mem_mood,
+                    ft.ElevatedButton(
+                        "Wipe All Memory",
+                        icon=ft.Icons.DELETE_FOREVER,
+                        on_click=do_wipe_memory,
+                        width=340,
+                    ),
                     ft.Divider(),
 
                     # --- Backup ---
@@ -262,7 +303,11 @@ def main(page: ft.Page):
         status.value = "💭 Ruby is thinking..."
         page.update()
 
-        reply = response_engine.respond(msg, RUBY_PROMPT)
+        try:
+            reply = response_engine.respond(msg, RUBY_PROMPT)
+        except Exception as ex:
+            reply = f"⚠️ error: {ex}"
+            print(f"❌ respond error: {ex}")
 
         status.value = "🧠 Ruby is ready."
         add_message("Ruby", reply)
