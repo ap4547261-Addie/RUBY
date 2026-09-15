@@ -8,30 +8,29 @@ class ResponseEngine:
         self.short_term = ShortTermMemory(max_messages=10)
         self.long_term = LongTermMemory()
 
-    def respond(self, user_message: str, ruby_prompt: str) -> str:
-        # 1. Get relevant long-term memory context
-        memory_context = self.long_term.get_relevant_context(
-            user_message, limit=3
+    def respond(self, user_message: str, ruby_prompt: str, user_name: str = "Addie") -> str:
+        # --- Get long-term memory as a natural note ---
+        memory_block = self.long_term.get_relevant_context(user_message, limit=3)
+
+        # --- Combine description + memory into one "who Ruby is right now" block ---
+        description = ruby_prompt
+        if memory_block:
+            description = f"{ruby_prompt}\n\nThings Ruby remembers:\n{memory_block}"
+
+        # --- Add the new user message to short-term history ---
+        self.short_term.add("user", user_message)
+
+        # --- Generate ---
+        reply = self.brain.generate(
+            description=description,
+            history=self.short_term.get_messages(),
+            user_name=user_name,
         )
 
-        # 2. Inject into the system prompt
-        system_content = ruby_prompt
-        if memory_context:
-            system_content = f"{ruby_prompt}\n\n{memory_context}"
-
-        # 3. Build full message list
-        messages = [{"role": "system", "content": system_content}]
-        messages.extend(self.short_term.get_messages())
-        messages.append({"role": "user", "content": user_message})
-
-        # 4. Generate
-        reply = self.brain.generate(messages)
-
-        # 5. Save to short-term (immediate context)
-        self.short_term.add("user", user_message)
+        # --- Store the reply ---
         self.short_term.add("assistant", reply)
 
-        # 6. Save to long-term (persists across restarts)
+        # --- Persist to long-term memory ---
         self.long_term.remember(user_message, reply)
 
         return reply
