@@ -11,8 +11,8 @@ class LocalBrain:
             print(f"🔄 Loading model from: {model_path}")
             self.model = Llama(
                 model_path=model_path,
-                n_ctx=2048,
-                n_threads=4,
+                n_ctx=1024,          
+                n_threads=3,        
                 verbose=False,
             )
             self.model_path = model_path
@@ -26,51 +26,47 @@ class LocalBrain:
     def is_loaded(self) -> bool:
         return self.model is not None
 
-    def generate(self, description: str, history: list, user_name: str = "Addie") -> str:
+    def generate(self, description: str, history: list, user_name: str = "not_set") -> str:
         if self.model is None:
             return "My brain isn't loaded yet."
 
-        # --- Build transcript with clear scene boundaries ---
-        lines = []
-        lines.append("### SCENE ###")
-        lines.append(description.strip())
-        lines.append("### END SCENE ###")
-        lines.append("")
-        lines.append("### CHAT LOG ###")
-
+        # Build messages list — Qwen's chat template is applied automatically
+        messages = [{"role": "system", "content": description}]
         for msg in history:
-            speaker = user_name if msg["role"] == "user" else "Ruby"
-            lines.append(f"{speaker}: {msg['content']}")
-
-        lines.append("Ruby:")
-
-        prompt = "\n".join(lines)
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
         try:
-            result = self.model(
-                prompt,
-                max_tokens=60,
+            result = self.model.create_chat_completion(
+                messages=messages,
+                max_tokens=40,
                 temperature=0.85,
                 top_p=0.9,
-                repeat_penalty=1.4,
-                frequency_penalty=0.6,
-                presence_penalty=0.4,
-                echo=False,
+                repeat_penalty=1.3,
+                frequency_penalty=0.5,
+                presence_penalty=0.3,
                 stop=[
                     f"{user_name}:",
-                    "###",
                     "Ruby:",
-                    "\n\n\n",
+                    "###",
+                    "\n\n",
+                    "**",
                 ],
             )
-            reply = result["choices"][0]["text"].strip()
+            reply = result["choices"][0]["message"]["content"].strip()
 
-            # Strip any leaked prefixes
-            for junk in [f"{user_name}:", "Ruby:", "###"]:
-                if junk in reply:
-                    reply = reply.split(junk)[0].strip()
+            # ---- cleanup pass ----
+            # strip markdown
+            reply = reply.replace("**", "").replace("*", "").strip()
+            # strip role prefixes if leaked
+            if reply.lower().startswith("ruby:"):
+                reply = reply[5:].strip()
+            if reply.lower().startswith(f"{user_name.lower()}:"):
+                reply = reply[len(user_name) + 1:].strip()
+            # collapse newlines into a single space
+            reply = " ".join(reply.split())
 
             return reply
+
         except Exception as error:
             print(f"❌ Generation error: {error}")
             return "..."
