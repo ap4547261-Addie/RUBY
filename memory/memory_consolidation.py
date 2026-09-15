@@ -125,11 +125,14 @@ class MemoryConsolidation:
         parts = []
         display = self._display_name()
 
-        # 1. Facts about the user
+        # 1. Facts about the user — hide name/nickname
         facts = self.semantic.get_all_for(self.user_name)
         if facts:
-            fact_bits = [f"{k.replace('_', ' ')} is {v}" for k, v in facts]
-            parts.append(f"You remember about {display}: {', '.join(fact_bits)}.")
+            filtered = [(k, v) for k, v in facts
+                        if k.lower() not in ("name", "nickname")]
+            if filtered:
+                fact_bits = [f"{k.replace('_', ' ')} is {v}" for k, v in filtered]
+                parts.append(f"You remember about {display}: {', '.join(fact_bits)}.")
 
         # 2. Relevant past episode
         keywords = [w for w in user_message.lower().split() if len(w) >= 4]
