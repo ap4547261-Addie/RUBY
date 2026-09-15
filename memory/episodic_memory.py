@@ -1,5 +1,5 @@
 from datetime import datetime
-from memory.storage import database
+from memory import database
 
 
 class EpisodicMemory:
@@ -23,10 +23,7 @@ class EpisodicMemory:
         conn = database.get_connection()
         c = conn.cursor()
         c.execute(
-            """
-            SELECT user_message, ruby_reply, timestamp
-            FROM episodes ORDER BY id DESC LIMIT ?
-            """,
+            "SELECT user_message, ruby_reply, timestamp FROM episodes ORDER BY id DESC LIMIT ?",
             (limit,),
         )
         rows = c.fetchall()
