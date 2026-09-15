@@ -1,4 +1,4 @@
-name: Build Ruby v0.1 APK
+name: Build Ruby v0.4 APK
 
 on:
   push:
