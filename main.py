@@ -55,7 +55,7 @@ def main(page: ft.Page):
             status.value = f"🧠 {name} loaded. Ruby is awake!"
             settings.set("model_path", path)
             settings.set("model_name", name)
-            add_message("Ruby", "Hyy Addie 😌 I'm awake!")
+            add_message("Ruby", "😌 I'm awake!")
         else:
             status.value = f"❌ Failed to load {name}"
             page.update()
@@ -364,7 +364,7 @@ def main(page: ft.Page):
         ft.Row(controls=[message_box, send_button]),
     )
 
-    add_message("Ruby", "Hyy Addie 👀 Ready when you are.")
+    add_message("Ruby", "Hyy 👀 Ready when you are.")
 
     # ----------------------------------------
     # Auto-load saved model
