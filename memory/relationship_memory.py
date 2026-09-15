@@ -1,5 +1,5 @@
 from datetime import datetime
-from memory.storage import database
+from memory import database
 
 
 class RelationshipMemory:
@@ -50,8 +50,7 @@ class RelationshipMemory:
         c.execute(
             """
             UPDATE relationship
-            SET message_count = message_count + 1,
-                last_updated = ?
+            SET message_count = message_count + 1, last_updated = ?
             WHERE user_name = ?
             """,
             (datetime.now().isoformat(timespec="seconds"), self.user_name),
@@ -65,8 +64,7 @@ class RelationshipMemory:
         c.execute(
             """
             UPDATE relationship
-            SET trust_level = trust_level + ?,
-                last_updated = ?
+            SET trust_level = trust_level + ?, last_updated = ?
             WHERE user_name = ?
             """,
             (amount, datetime.now().isoformat(timespec="seconds"), self.user_name),
@@ -79,8 +77,7 @@ class RelationshipMemory:
         c = conn.cursor()
         c.execute(
             """
-            UPDATE relationship
-            SET mood = ?, last_updated = ?
+            UPDATE relationship SET mood = ?, last_updated = ?
             WHERE user_name = ?
             """,
             (mood, datetime.now().isoformat(timespec="seconds"), self.user_name),
