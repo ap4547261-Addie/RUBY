@@ -12,91 +12,45 @@ def get_connection():
 def init_db():
     conn = get_connection()
     c = conn.cursor()
+
+    # Episodes: raw conversations
     c.execute("""
-        CREATE TABLE IF NOT EXISTS memories (
+        CREATE TABLE IF NOT EXISTS episodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_message TEXT NOT NULL,
             ruby_reply TEXT NOT NULL,
             timestamp TEXT NOT NULL,
-            category TEXT DEFAULT 'conversation',
             importance INTEGER DEFAULT 3
         )
     """)
+
+    # Facts: semantic memory about the user (e.g. "name" -> "Addie")
     c.execute("""
-        CREATE INDEX IF NOT EXISTS idx_timestamp
-        ON memories (timestamp DESC)
+        CREATE TABLE IF NOT EXISTS facts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            UNIQUE(subject, key)
+        )
     """)
+
+    # Relationship: trust level, message count, mood toward user
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS relationship (
+            id INTEGER PRIMARY KEY,
+            user_name TEXT NOT NULL,
+            message_count INTEGER DEFAULT 0,
+            trust_level INTEGER DEFAULT 0,
+            mood TEXT DEFAULT 'guarded',
+            last_updated TEXT
+        )
+    """)
+
+    c.execute("CREATE INDEX IF NOT EXISTS idx_ep_ts ON episodes(timestamp DESC)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_fact_sub ON facts(subject)")
+
     conn.commit()
     conn.close()
     print("✅ Memory database initialized.")
-
-
-def insert_memory(user_message, ruby_reply, timestamp,
-                  category="conversation", importance=3):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        INSERT INTO memories (user_message, ruby_reply, timestamp, category, importance)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (user_message, ruby_reply, timestamp, category, importance),
-    )
-    conn.commit()
-    conn.close()
-
-
-def get_recent(limit=5):
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute(
-        """
-        SELECT user_message, ruby_reply, timestamp
-        FROM memories
-        ORDER BY id DESC
-        LIMIT ?
-        """,
-        (limit,),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-
-def search_by_keyword(keyword, limit=5):
-    if not keyword or len(keyword) < 3:
-        return []
-    conn = get_connection()
-    c = conn.cursor()
-    like = f"%{keyword.lower()}%"
-    c.execute(
-        """
-        SELECT user_message, ruby_reply, timestamp
-        FROM memories
-        WHERE LOWER(user_message) LIKE ? OR LOWER(ruby_reply) LIKE ?
-        ORDER BY id DESC
-        LIMIT ?
-        """,
-        (like, like, limit),
-    )
-    rows = c.fetchall()
-    conn.close()
-    return rows
-
-
-def count_memories():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) FROM memories")
-    n = c.fetchone()[0]
-    conn.close()
-    return n
-
-
-def clear_all():
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("DELETE FROM memories")
-    conn.commit()
-    conn.close()
-    print("🗑️ All memories cleared.")
