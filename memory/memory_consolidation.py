@@ -134,72 +134,52 @@ class MemoryConsolidation:
     # Context builder — infinite scale
     # -------------------------
     def build_context(self, user_message: str) -> str:
-        blocks = []
+    """Return a short narrative about Ruby's state — no headers, no rules."""
+    parts = []
 
-        # 1. Facts
-        facts = self.semantic.get_all_for(self.user_name)
-        if facts:
-            lines = [f"- {k.replace('_', ' ')}: {v}" for k, v in facts]
-            blocks.append("Facts you know:\n" + "\n".join(lines))
+    # 1. Facts (as a natural sentence)
+    facts = self.semantic.get_all_for(self.user_name)
+    if facts:
+        fact_bits = [f"{k.replace('_', ' ')} is {v}" for k, v in facts]
+        parts.append(f"You remember: {', '.join(fact_bits)}.")
 
-        # 2. Relevant episodes
-        keywords = [w for w in user_message.lower().split() if len(w) >= 4]
-        found = []
-        for kw in keywords[:2]:
-            for row in self.episodic.search(kw, limit=2):
-                if row not in found:
-                    found.append(row)
-        if found:
-            lines = [f"- they said: {u}\n  you replied: {r}" for u, r, _ in found]
-            blocks.append("Memories:\n" + "\n".join(lines))
+    # 2. Relevant episodes (as a quiet memory)
+    keywords = [w for w in user_message.lower().split() if len(w) >= 4]
+    found = []
+    for kw in keywords[:2]:
+        for row in self.episodic.search(kw, limit=1):
+            if row not in found:
+                found.append(row)
+    if found:
+        u, r, _ = found[0]
+        parts.append(f'You remember him saying "{u}" and you answered "{r}".')
 
-        # 3. Continuous emotional state — translated into language
-        s = self.relationship.get_state()
-        trust = s["trust"]
-        fam = s["familiarity"]
-        attach = s["attachment"]
-        respect = s["respect"]
+    # 3. Emotional state — prose, not bullets
+    s = self.relationship.get_state()
+    trust = s["trust"]
+    fam = s["familiarity"]
+    attach = s["attachment"]
+    respect = s["respect"]
+    count = s["message_count"]
 
-        # describe state as natural language, no fixed tiers
-        tone_lines = []
-        tone_lines.append(f"You've exchanged {s['message_count']} messages.")
-        tone_lines.append(f"Your familiarity with them: {fam:.2f}")
-        tone_lines.append(f"Your trust in them: {trust:.2f}")
-        tone_lines.append(f"Your respect for them: {respect:.2f}")
-        tone_lines.append(f"Your attachment to them: {attach:.2f}")
+    # build ONE natural sentence describing her state
+    if trust < 0.5 and attach < 0.5:
+        mood = "You barely know him. You're guarded and cold."
+    elif trust < 3 and attach < 3:
+        mood = "You're starting to notice him. Still guarded, but a little curious."
+    elif trust < 10 and attach < 10:
+        mood = "You trust him. You can say real things. You're warming up."
+    else:
+        mood = "You're deeply attached to him. You love him, though it's hard to show."
 
-        # interpret
-        interpretation = []
-        if trust < 0.5:
-            interpretation.append("You don't trust them yet. Stay guarded.")
-        elif trust < 3:
-            interpretation.append("You're starting to trust them a little.")
-        elif trust < 10:
-            interpretation.append("You trust them. You can say real things.")
-        else:
-            interpretation.append("You trust them completely. You can be vulnerable.")
+    if respect > 3:
+        mood += " You respect him. You take him seriously."
+    elif respect < -1:
+        mood += " You've lost some respect for him."
 
-        if attach < 0.5:
-            interpretation.append("You don't feel attached yet.")
-        elif attach < 3:
-            interpretation.append("You're starting to care. You don't want to admit it.")
-        elif attach < 10:
-            interpretation.append("You're attached. You miss them when they're gone.")
-        else:
-            interpretation.append("You're deeply attached. You love them. Showing it is hard but you can't help it.")
+    parts.append(f"{mood} (exchanged {count} messages so far)")
 
-        if respect > 3:
-            interpretation.append("You respect them. You take them seriously.")
-        elif respect < -1:
-            interpretation.append("You've lost respect for them. You're dismissive.")
-
-        blocks.append(
-            "How you feel right now:\n" + "\n".join(tone_lines)
-            + "\n\nHow to act:\n- " + "\n- ".join(interpretation)
-        )
-
-        return "\n\n".join(blocks)
-
+    return " ".join(parts)
     # -------------------------
     # Utilities
     # -------------------------
