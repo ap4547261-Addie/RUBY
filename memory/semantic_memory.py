@@ -1,12 +1,11 @@
 from datetime import datetime
-from memory.storage import database
+from memory import database
 
 
 class SemanticMemory:
     """Facts about the user — the important, distilled stuff."""
 
     def remember_fact(self, subject, key, value):
-        """Save or update a fact. Example: subject='Addie', key='favorite_color', value='blue'."""
         conn = database.get_connection()
         c = conn.cursor()
         c.execute(
