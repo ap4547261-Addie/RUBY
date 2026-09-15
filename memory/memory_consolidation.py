@@ -8,9 +8,7 @@ from memory.relationship_memory import RelationshipMemory
 class MemoryConsolidation:
 
     def __init__(self, user_name="Addie"):
-        # Ensure all tables exist BEFORE creating any memory objects
         database.init_db()
-
         self.user_name = user_name
         self.episodic = EpisodicMemory()
         self.semantic = SemanticMemory()
@@ -26,7 +24,6 @@ class MemoryConsolidation:
         return len(text.split()) >= words
 
     def _is_personal_reveal(self, text):
-        """Detects when user shares something real about themselves."""
         markers = [
             "i feel", "i felt", "i think", "i believe",
             "my mother", "my father", "my family", "my life",
@@ -38,7 +35,6 @@ class MemoryConsolidation:
         return any(m in t for m in markers)
 
     def _is_clever(self, text):
-        """Detects wit, humor, or insight (rough heuristics)."""
         t = text.lower().strip()
         if len(text.split()) < 3:
             return False
@@ -50,7 +46,6 @@ class MemoryConsolidation:
         return any(m in t for m in clever_markers)
 
     def _is_rude(self, text):
-        """Detects rudeness or pushiness."""
         t = text.lower()
         rude_markers = [
             "shut up", "stupid", "dumb", "idiot",
@@ -60,7 +55,6 @@ class MemoryConsolidation:
         return any(m in t for m in rude_markers)
 
     def _is_pushy(self, text):
-        """Detects demanding behavior."""
         t = text.lower()
         return any(m in t for m in [
             "send me", "show me now", "do this for me",
@@ -68,9 +62,9 @@ class MemoryConsolidation:
         ])
 
     # -------------------------
-    # Fact extraction (rule-based)
+    # Fact extraction
     # -------------------------
-    def extract_facts(self, text: str):
+    def extract_facts(self, text):
         text_lower = text.lower()
         patterns = [
             (r"my name is ([a-z\s]+?)(?:[.,!?]|$)", "name"),
@@ -95,19 +89,11 @@ class MemoryConsolidation:
     # Main entry point
     # -------------------------
     def process(self, user_message, ruby_reply):
-        # 1. Save raw episode
         self.episodic.remember(user_message, ruby_reply)
-
-        # 2. Extract facts
         self.extract_facts(user_message)
-
-        # 3. Count message
         self.relationship.add_message()
-
-        # 4. Grow familiarity for showing up
         self.relationship.grow_familiarity(0.02)
 
-        # 5. Reward quality
         if self._is_personal_reveal(user_message):
             self.relationship.grow_trust(0.15)
             print("📈 +trust (personal reveal)")
@@ -118,7 +104,6 @@ class MemoryConsolidation:
             self.relationship.grow_respect(0.10)
             print("📈 +respect (clever)")
 
-        # 6. Penalize bad behavior
         if self._is_rude(user_message):
             self.relationship.shrink_trust(0.15)
             self.relationship.shrink_respect(0.10)
@@ -127,59 +112,56 @@ class MemoryConsolidation:
         if self._is_pushy(user_message):
             self.relationship.shrink_respect(0.05)
 
-        # 7. Attachment grows very slowly — time + consistency only
         self.relationship.grow_attachment(0.005)
 
     # -------------------------
-    # Context builder — infinite scale
+    # Context builder (prose, not instructions)
     # -------------------------
-    def build_context(self, user_message: str) -> str:
-    """Return a short narrative about Ruby's state — no headers, no rules."""
-    parts = []
+    def build_context(self, user_message):
+        parts = []
 
-    # 1. Facts (as a natural sentence)
-    facts = self.semantic.get_all_for(self.user_name)
-    if facts:
-        fact_bits = [f"{k.replace('_', ' ')} is {v}" for k, v in facts]
-        parts.append(f"You remember: {', '.join(fact_bits)}.")
+        # 1. Facts as a quiet note
+        facts = self.semantic.get_all_for(self.user_name)
+        if facts:
+            fact_bits = [f"{k.replace('_', ' ')} is {v}" for k, v in facts]
+            parts.append(f"You remember: {', '.join(fact_bits)}.")
 
-    # 2. Relevant episodes (as a quiet memory)
-    keywords = [w for w in user_message.lower().split() if len(w) >= 4]
-    found = []
-    for kw in keywords[:2]:
-        for row in self.episodic.search(kw, limit=1):
-            if row not in found:
-                found.append(row)
-    if found:
-        u, r, _ = found[0]
-        parts.append(f'You remember him saying "{u}" and you answered "{r}".')
+        # 2. One relevant episode
+        keywords = [w for w in user_message.lower().split() if len(w) >= 4]
+        found = []
+        for kw in keywords[:2]:
+            for row in self.episodic.search(kw, limit=1):
+                if row not in found:
+                    found.append(row)
+        if found:
+            u, r, _ = found[0]
+            parts.append(f'You remember him saying "{u}" and you answered "{r}".')
 
-    # 3. Emotional state — prose, not bullets
-    s = self.relationship.get_state()
-    trust = s["trust"]
-    fam = s["familiarity"]
-    attach = s["attachment"]
-    respect = s["respect"]
-    count = s["message_count"]
+        # 3. Emotional state as a single prose sentence
+        s = self.relationship.get_state()
+        trust = s["trust"]
+        attach = s["attachment"]
+        respect = s["respect"]
+        count = s["message_count"]
 
-    # build ONE natural sentence describing her state
-    if trust < 0.5 and attach < 0.5:
-        mood = "You barely know him. You're guarded and cold."
-    elif trust < 3 and attach < 3:
-        mood = "You're starting to notice him. Still guarded, but a little curious."
-    elif trust < 10 and attach < 10:
-        mood = "You trust him. You can say real things. You're warming up."
-    else:
-        mood = "You're deeply attached to him. You love him, though it's hard to show."
+        if trust < 0.5 and attach < 0.5:
+            mood = "You barely know him. You're guarded and cold."
+        elif trust < 3 and attach < 3:
+            mood = "You're starting to notice him. Still guarded, but a little curious."
+        elif trust < 10 and attach < 10:
+            mood = "You trust him. You can say real things. You're warming up."
+        else:
+            mood = "You're deeply attached to him. You love him, though it's hard to show."
 
-    if respect > 3:
-        mood += " You respect him. You take him seriously."
-    elif respect < -1:
-        mood += " You've lost some respect for him."
+        if respect > 3:
+            mood += " You respect him. You take him seriously."
+        elif respect < -1:
+            mood += " You've lost some respect for him."
 
-    parts.append(f"{mood} (exchanged {count} messages so far)")
+        parts.append(f"{mood} (exchanged {count} messages so far)")
 
-    return " ".join(parts)
+        return " ".join(parts)
+
     # -------------------------
     # Utilities
     # -------------------------
