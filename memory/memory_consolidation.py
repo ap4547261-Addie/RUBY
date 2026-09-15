@@ -18,7 +18,6 @@ class MemoryConsolidation:
     # Display name
     # -------------------------
     def _display_name(self):
-        """Turn 'not_set' into a natural phrase for the prompt."""
         if not self.user_name or self.user_name == "not_set":
             return "the stranger"
         return self.user_name
@@ -120,7 +119,7 @@ class MemoryConsolidation:
         self.relationship.grow_attachment(0.005)
 
     # -------------------------
-    # Context builder (prose, no headers)
+    # Context builder (prose, cold thresholds)
     # -------------------------
     def build_context(self, user_message):
         parts = []
@@ -143,24 +142,29 @@ class MemoryConsolidation:
             u, r, _ = found[0]
             parts.append(f'You remember {display} saying "{u}" and you answered "{r}".')
 
-        # 3. Emotional state — prose
+        # 3. Emotional state — COLD for a long time
         s = self.relationship.get_state()
         trust = s["trust"]
         attach = s["attachment"]
         respect = s["respect"]
         count = s["message_count"]
 
-        if trust < 0.5 and attach < 0.5:
-            mood = f"You barely know {display}. You're guarded and cold."
-        elif trust < 3 and attach < 3:
-            mood = f"You're starting to notice {display}. Still guarded, but a little curious."
+        if trust < 3 and attach < 3:
+            mood = (f"You barely know {display}. Stay cold, guarded, and brief. "
+                    f"Do NOT act friendly. Do NOT ask how they are. "
+                    f"Do NOT say 'nice to meet you'. Do NOT offer to meet up.")
         elif trust < 10 and attach < 10:
-            mood = f"You trust {display}. You can say real things. You're warming up."
+            mood = (f"You're slowly getting used to {display}. Still guarded, "
+                    f"but occasionally interested when they say something real.")
+        elif trust < 25 and attach < 25:
+            mood = (f"You've started to trust {display}. You can say real things — "
+                    f"rarely, and only when it matters.")
         else:
-            mood = f"You're deeply attached to {display}. You love them, though it's hard to show."
+            mood = (f"You're deeply attached to {display}. You love them, "
+                    f"though it's hard to show.")
 
         if respect > 3:
-            mood += f" You respect {display}. You take them seriously."
+            mood += f" You respect {display}."
         elif respect < -1:
             mood += f" You've lost some respect for {display}."
 
