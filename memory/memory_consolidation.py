@@ -7,7 +7,7 @@ from memory.relationship_memory import RelationshipMemory
 
 class MemoryConsolidation:
 
-    def __init__(self, user_name="Addie"):
+    def __init__(self, user_name="not_set"):
         database.init_db()
         self.user_name = user_name
         self.episodic = EpisodicMemory()
