@@ -1,4 +1,4 @@
-# main.py - Ruby V0.4 (with Memory Consolidation + Persistent Chat + Stable Model Path)
+# main.py - Ruby V0.6 (Memory + Internal State + Emotion)
 
 import os
 import shutil
@@ -46,14 +46,13 @@ def main(page: ft.Page):
         page.update()
 
     # ----------------------------------------
-    # Load chat history from SQLite on startup
+    # Load chat history on startup
     # ----------------------------------------
     def load_chat_history():
         try:
             from memory.episodic_memory import EpisodicMemory
             ep = EpisodicMemory()
             rows = ep.get_recent(limit=30)
-            # rows are newest-first; reverse for chronological order
             for user_msg, ruby_reply, _ts in reversed(rows):
                 chat.controls.append(
                     ft.Text(f"You: {user_msg}", selectable=True, size=16, color=ft.Colors.CYAN_400)
@@ -67,28 +66,23 @@ def main(page: ft.Page):
             print(f"⚠️ Could not load chat history: {ex}")
 
     # ----------------------------------------
-    # Stable model path (survives app restarts)
+    # Stable model path
     # ----------------------------------------
     def get_stable_model_path(original_path, original_name):
-        """Copy the picked model into app-private storage so it survives restarts."""
         storage_dir = os.getenv("FLET_APP_STORAGE_DATA", ".")
         stable_dir = os.path.join(storage_dir, "models")
         os.makedirs(stable_dir, exist_ok=True)
-
         stable_path = os.path.join(stable_dir, original_name)
 
-        # already in stable location
         try:
             if os.path.abspath(original_path) == os.path.abspath(stable_path):
                 return stable_path
         except Exception:
             pass
 
-        # if it already exists there, reuse it
         if os.path.exists(stable_path):
             return stable_path
 
-        # otherwise copy once
         try:
             print(f"📦 Copying model to permanent storage: {stable_path}")
             shutil.copy(original_path, stable_path)
@@ -105,10 +99,9 @@ def main(page: ft.Page):
         status.value = f"🧠 Loading {name}..."
         page.update()
 
-        # copy to stable path first
         stable_path = get_stable_model_path(path, name)
-
         success = brain.load_model(stable_path)
+
         if success:
             status.value = f"🧠 {name} loaded. Ruby is awake!"
             settings.set("model_path", stable_path)
@@ -123,7 +116,6 @@ def main(page: ft.Page):
     def handle_file_pick(e: ft.FilePickerResultEvent):
         if not e.files:
             return
-
         f = e.files[0]
         if not f.path:
             status.value = "❌ No file path provided."
@@ -131,7 +123,6 @@ def main(page: ft.Page):
             return
 
         action = file_picker_mode.get("action")
-
         if action == "model":
             load_model(f.path, f.name)
         elif action == "import_backup":
@@ -140,7 +131,6 @@ def main(page: ft.Page):
                 show_snack("✅ Backup imported. Restart the app to apply.")
             else:
                 show_snack("❌ Backup import failed.")
-
         file_picker_mode["action"] = None
 
     file_picker = ft.FilePicker(on_result=handle_file_pick)
@@ -198,9 +188,9 @@ def main(page: ft.Page):
         try:
             stats = response_engine.memory_stats()
             rel = stats["relationship"]
-            mem_episodes = ft.Text(f"Episodes stored: {stats['episodes']}", size=12, color=ft.Colors.GREY_400)
-            mem_facts = ft.Text(f"Facts learned: {stats['facts']}", size=12, color=ft.Colors.GREY_400)
-            mem_msgs = ft.Text(f"Messages exchanged: {rel['message_count']}", size=12, color=ft.Colors.GREY_400)
+            mem_episodes = ft.Text(f"Episodes: {stats['episodes']}", size=12, color=ft.Colors.GREY_400)
+            mem_facts = ft.Text(f"Facts: {stats['facts']}", size=12, color=ft.Colors.GREY_400)
+            mem_msgs = ft.Text(f"Messages: {rel['message_count']}", size=12, color=ft.Colors.GREY_400)
             mem_trust = ft.Text(f"Trust: {rel['trust']}", size=12, color=ft.Colors.GREY_400)
             mem_fam = ft.Text(f"Familiarity: {rel['familiarity']}", size=12, color=ft.Colors.GREY_400)
             mem_resp = ft.Text(f"Respect: {rel['respect']}", size=12, color=ft.Colors.GREY_400)
@@ -216,20 +206,33 @@ def main(page: ft.Page):
 
         # --- Internal State (V0.5) ---
         try:
-            from ruby_core.internal_state import InternalState
-            inner_state = InternalState(user_name=user_name)
-            inner_data = inner_state.get()
+            inner_data = response_engine.internal_state_stats()
             inner_energy = ft.Text(f"Energy: {inner_data['energy']}", size=12, color=ft.Colors.CYAN_300)
             inner_warmth = ft.Text(f"Warmth: {inner_data['warmth']}", size=12, color=ft.Colors.CYAN_300)
             inner_tension = ft.Text(f"Tension: {inner_data['tension']}", size=12, color=ft.Colors.CYAN_300)
             inner_irrit = ft.Text(f"Irritation: {inner_data['irritation']}", size=12, color=ft.Colors.CYAN_300)
-            inner_mood = ft.Text(f"Mood: {inner_state.describe()}", size=11, color=ft.Colors.GREY_500)
         except Exception as inner_ex:
             inner_energy = ft.Text(f"State unavailable: {inner_ex}", size=12, color=ft.Colors.RED_300)
             inner_warmth = ft.Text("", size=12)
             inner_tension = ft.Text("", size=12)
             inner_irrit = ft.Text("", size=12)
-            inner_mood = ft.Text("", size=11)
+
+        # --- Emotions (V0.6) ---
+        try:
+            emo = response_engine.emotion_stats()
+            # show only emotions that have actually fired (> 0.1)
+            active = {k: v for k, v in emo.items() if v > 0.1}
+            if active:
+                # sort descending by intensity
+                sorted_emo = sorted(active.items(), key=lambda x: -x[1])
+                emo_lines = [
+                    ft.Text(f"{k}: {v}", size=12, color=ft.Colors.PURPLE_200)
+                    for k, v in sorted_emo
+                ]
+            else:
+                emo_lines = [ft.Text("No active emotions yet.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as emo_ex:
+            emo_lines = [ft.Text(f"Emotions unavailable: {emo_ex}", size=12, color=ft.Colors.RED_300)]
 
         # --- Actions ---
         def pick_model(ev):
@@ -278,9 +281,9 @@ def main(page: ft.Page):
         def do_wipe_memory(ev):
             try:
                 response_engine.wipe_all_memory()
-                mem_episodes.value = "Episodes stored: 0"
-                mem_facts.value = "Facts learned: 0"
-                mem_msgs.value = "Messages exchanged: 0"
+                mem_episodes.value = "Episodes: 0"
+                mem_facts.value = "Facts: 0"
+                mem_msgs.value = "Messages: 0"
                 mem_trust.value = "Trust: 0"
                 mem_fam.value = "Familiarity: 0"
                 mem_resp.value = "Respect: 0"
@@ -289,7 +292,6 @@ def main(page: ft.Page):
                 inner_warmth.value = "Warmth: 0.0"
                 inner_tension.value = "Tension: 0.0"
                 inner_irrit.value = "Irritation: 0.0"
-                inner_mood.value = "Mood: You feel neutral."
                 chat.controls.clear()
                 show_snack("🗑️ All memory wiped.")
             except Exception as ex:
@@ -339,7 +341,11 @@ def main(page: ft.Page):
                     inner_warmth,
                     inner_tension,
                     inner_irrit,
-                    inner_mood,
+                    ft.Divider(),
+
+                    # --- Emotions (V0.6) ---
+                    ft.Text("❤️ Emotions", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PURPLE_200),
+                    *emo_lines,
                     ft.Divider(),
 
                     # --- Wipe ---
