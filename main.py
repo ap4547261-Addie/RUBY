@@ -1,5 +1,7 @@
-# main.py - Ruby V0.4 (with Memory Consolidation)
+# main.py - Ruby V0.4 (with Memory Consolidation + Persistent Chat + Stable Model Path)
 
+import os
+import shutil
 import flet as ft
 
 from brain.local_brain import LocalBrain
@@ -20,7 +22,7 @@ def main(page: ft.Page):
     brain = LocalBrain()
     settings = SettingsManager()
 
-    user_name = settings.get("user_name", "not_set") 
+    user_name = settings.get("user_name", "not_set")
     response_engine = ResponseEngine(brain, user_name=user_name)
 
     # ----------------------------------------
@@ -44,18 +46,73 @@ def main(page: ft.Page):
         page.update()
 
     # ----------------------------------------
+    # Load chat history from SQLite on startup
+    # ----------------------------------------
+    def load_chat_history():
+        try:
+            from memory.episodic_memory import EpisodicMemory
+            ep = EpisodicMemory()
+            rows = ep.get_recent(limit=30)
+            # rows are newest-first; reverse for chronological order
+            for user_msg, ruby_reply, _ts in reversed(rows):
+                chat.controls.append(
+                    ft.Text(f"You: {user_msg}", selectable=True, size=16, color=ft.Colors.CYAN_400)
+                )
+                chat.controls.append(
+                    ft.Text(f"Ruby: {ruby_reply}", selectable=True, size=16, color=ft.Colors.PINK_400)
+                )
+            if rows:
+                print(f"📜 Restored {len(rows)} past exchanges.")
+        except Exception as ex:
+            print(f"⚠️ Could not load chat history: {ex}")
+
+    # ----------------------------------------
+    # Stable model path (survives app restarts)
+    # ----------------------------------------
+    def get_stable_model_path(original_path, original_name):
+        """Copy the picked model into app-private storage so it survives restarts."""
+        storage_dir = os.getenv("FLET_APP_STORAGE_DATA", ".")
+        stable_dir = os.path.join(storage_dir, "models")
+        os.makedirs(stable_dir, exist_ok=True)
+
+        stable_path = os.path.join(stable_dir, original_name)
+
+        # already in stable location
+        try:
+            if os.path.abspath(original_path) == os.path.abspath(stable_path):
+                return stable_path
+        except Exception:
+            pass
+
+        # if it already exists there, reuse it
+        if os.path.exists(stable_path):
+            return stable_path
+
+        # otherwise copy once
+        try:
+            print(f"📦 Copying model to permanent storage: {stable_path}")
+            shutil.copy(original_path, stable_path)
+            print("✅ Model copied.")
+            return stable_path
+        except Exception as e:
+            print(f"⚠️ Copy failed, using original path: {e}")
+            return original_path
+
+    # ----------------------------------------
     # Model Loading
     # ----------------------------------------
     def load_model(path, name):
         status.value = f"🧠 Loading {name}..."
         page.update()
 
-        success = brain.load_model(path)
+        # copy to stable path first
+        stable_path = get_stable_model_path(path, name)
+
+        success = brain.load_model(stable_path)
         if success:
             status.value = f"🧠 {name} loaded. Ruby is awake!"
-            settings.set("model_path", path)
+            settings.set("model_path", stable_path)
             settings.set("model_name", name)
-            add_message("Ruby", "😌 I'm awake!")
         else:
             status.value = f"❌ Failed to load {name}"
             page.update()
@@ -137,7 +194,7 @@ def main(page: ft.Page):
             size=12, color=ft.Colors.GREY_400,
         )
 
-        # --- Memory stats (V0.4 - open evolution) ---
+        # --- Memory stats (V0.4) ---
         try:
             stats = response_engine.memory_stats()
             rel = stats["relationship"]
@@ -157,6 +214,23 @@ def main(page: ft.Page):
             mem_resp = ft.Text("", size=12)
             mem_att = ft.Text("", size=12)
 
+        # --- Internal State (V0.5) ---
+        try:
+            from ruby_core.internal_state import InternalState
+            inner_state = InternalState(user_name=user_name)
+            inner_data = inner_state.get()
+            inner_energy = ft.Text(f"Energy: {inner_data['energy']}", size=12, color=ft.Colors.CYAN_300)
+            inner_warmth = ft.Text(f"Warmth: {inner_data['warmth']}", size=12, color=ft.Colors.CYAN_300)
+            inner_tension = ft.Text(f"Tension: {inner_data['tension']}", size=12, color=ft.Colors.CYAN_300)
+            inner_irrit = ft.Text(f"Irritation: {inner_data['irritation']}", size=12, color=ft.Colors.CYAN_300)
+            inner_mood = ft.Text(f"Mood: {inner_state.describe()}", size=11, color=ft.Colors.GREY_500)
+        except Exception as inner_ex:
+            inner_energy = ft.Text(f"State unavailable: {inner_ex}", size=12, color=ft.Colors.RED_300)
+            inner_warmth = ft.Text("", size=12)
+            inner_tension = ft.Text("", size=12)
+            inner_irrit = ft.Text("", size=12)
+            inner_mood = ft.Text("", size=11)
+
         # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
@@ -174,7 +248,7 @@ def main(page: ft.Page):
                 ctx, thr = 1024, 4
 
             settings.update({
-                "user_name": name_field.value.strip() or "Addie",
+                "user_name": name_field.value.strip() or "not_set",
                 "user_phone": phone_field.value.strip(),
                 "user_email": email_field.value.strip(),
                 "context_size": ctx,
@@ -211,6 +285,12 @@ def main(page: ft.Page):
                 mem_fam.value = "Familiarity: 0"
                 mem_resp.value = "Respect: 0"
                 mem_att.value = "Attachment: 0"
+                inner_energy.value = "Energy: 0.0"
+                inner_warmth.value = "Warmth: 0.0"
+                inner_tension.value = "Tension: 0.0"
+                inner_irrit.value = "Irritation: 0.0"
+                inner_mood.value = "Mood: You feel neutral."
+                chat.controls.clear()
                 show_snack("🗑️ All memory wiped.")
             except Exception as ex:
                 show_snack(f"❌ Wipe failed: {ex}")
@@ -251,6 +331,18 @@ def main(page: ft.Page):
                     mem_fam,
                     mem_resp,
                     mem_att,
+                    ft.Divider(),
+
+                    # --- Internal State (V0.5) ---
+                    ft.Text("🧬 Internal State", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_300),
+                    inner_energy,
+                    inner_warmth,
+                    inner_tension,
+                    inner_irrit,
+                    inner_mood,
+                    ft.Divider(),
+
+                    # --- Wipe ---
                     ft.ElevatedButton(
                         "Wipe All Memory",
                         icon=ft.Icons.DELETE_FOREVER,
@@ -364,11 +456,12 @@ def main(page: ft.Page):
         ft.Row(controls=[message_box, send_button]),
     )
 
-    add_message("Ruby", "Hyy 👀 Ready when you are.")
+    # ----------------------------------------
+    # Restore previous chat + auto-load model
+    # ----------------------------------------
+    load_chat_history()
+    page.update()
 
-    # ----------------------------------------
-    # Auto-load saved model
-    # ----------------------------------------
     if settings.has_model():
         print(f"📂 Auto-loading: {settings.get('model_name')}")
         load_model(settings.get("model_path"), settings.get("model_name"))
