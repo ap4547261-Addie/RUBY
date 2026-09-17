@@ -1,4 +1,4 @@
-# main.py - Ruby V1.0 (Memory + State + Emotion + Identity + Social + Reflection + Motivation)
+# main.py - Ruby V1.2 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition)
 
 import os
 import shutil
@@ -303,7 +303,7 @@ def main(page: ft.Page):
         except Exception as refl_ex:
             reflection_lines = [ft.Text(f"Reflection unavailable: {refl_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Motivation (V1.0) — every drive, no cap ---
+        # --- Motivation (V1.0) ---
         try:
             drives = response_engine.drives_stats()
             if drives:
@@ -316,6 +316,38 @@ def main(page: ft.Page):
                 motivation_lines = [ft.Text("No drives yet.", size=12, color=ft.Colors.GREY_500)]
         except Exception as mot_ex:
             motivation_lines = [ft.Text(f"Motivation unavailable: {mot_ex}", size=12, color=ft.Colors.RED_300)]
+
+        # --- Cognition (V1.2) ---
+        try:
+            trace = response_engine.cognition_trace()
+            if trace:
+                cognition_lines = [
+                    ft.Text(
+                        f"Focus: {', '.join(k for k in trace.get('focused_on', {}))}",
+                        size=11, color=ft.Colors.BLUE_200,
+                    ),
+                    ft.Text(
+                        f"Appraisal: threat {round(trace.get('appraisal', {}).get('threat', 0), 2)}, "
+                        f"openness {round(trace.get('appraisal', {}).get('openness_required', 0), 2)}, "
+                        f"importance {round(trace.get('appraisal', {}).get('importance', 0), 2)}, "
+                        f"honesty {round(trace.get('appraisal', {}).get('perceived_honesty', 0), 2)}",
+                        size=11, color=ft.Colors.BLUE_200,
+                    ),
+                    ft.Text(
+                        f"Anticipation: {trace.get('prediction', {}).get('ready_for', '—')}",
+                        size=11, color=ft.Colors.BLUE_200,
+                    ),
+                    ft.Text(
+                        f"Decision: intent={trace.get('decision', {}).get('intent', '—')}, "
+                        f"tone={trace.get('decision', {}).get('tone', '—')}, "
+                        f"length={trace.get('decision', {}).get('length', '—')}",
+                        size=11, color=ft.Colors.BLUE_200,
+                    ),
+                ]
+            else:
+                cognition_lines = [ft.Text("No cognition trace yet.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as cog_ex:
+            cognition_lines = [ft.Text(f"Cognition unavailable: {cog_ex}", size=12, color=ft.Colors.RED_300)]
 
         # --- Actions ---
         def pick_model(ev):
@@ -449,6 +481,11 @@ def main(page: ft.Page):
                     # --- Motivation (V1.0) ---
                     ft.Text("🎯 Motivation", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
                     *motivation_lines,
+                    ft.Divider(),
+
+                    # --- Cognition (V1.2) ---
+                    ft.Text("🧠 Cognition", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_200),
+                    *cognition_lines,
                     ft.Divider(),
 
                     # --- Wipe ---
