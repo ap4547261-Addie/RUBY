@@ -7,6 +7,7 @@ from identity.identity_development import IdentityDevelopment
 from social.social_learning import SocialLearning
 from reflection.reflection_engine import ReflectionEngine
 from motivation.motivation_engine import MotivationEngine
+from cognition.cognition_engine import CognitionEngine
 
 
 class ResponseEngine:
@@ -23,17 +24,20 @@ class ResponseEngine:
         self.social = SocialLearning(subject=user_name)                # V0.8
         self.reflection = ReflectionEngine(user_name=user_name)        # V0.9
         self.motivation = MotivationEngine(user_name=user_name, platform=platform)  # V1.0
+        self.cognition = CognitionEngine(user_name=user_name)          # V1.2
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
-        # 1. Build context
+        # 1. Build memory context
         context = self.memory.build_context(user_message)
 
+        # V0.5 — internal state
         try:
             inner_line = self.dev.describe()
             context = f"{context}\n\nYour body and mood: {inner_line}"
         except Exception as e:
             print(f"⚠️ dev.describe failed: {e}")
 
+        # V0.6 — emotions
         try:
             emotions = self.emotion.get_all()
             emotion_line = self.emotion_expr.describe(emotions)
@@ -41,23 +45,44 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.describe failed: {e}")
 
+        # V0.7 — identity
         try:
             identity_line = self.identity.describe()
             context = f"{context}\n\n{identity_line}"
         except Exception as e:
             print(f"⚠️ identity.describe failed: {e}")
 
+        # V0.8 — social
         try:
             social_line = self.social.describe()
             context = f"{context}\n\nWho he is to you:\n{social_line}"
         except Exception as e:
             print(f"⚠️ social.describe failed: {e}")
 
+        # V1.0 — drives
         try:
             drive_line = self.motivation.describe()
             context = f"{context}\n\nWhat you need right now: {drive_line}"
         except Exception as e:
             print(f"⚠️ motivation.describe failed: {e}")
+
+        # V1.2 — cognition pipeline
+        try:
+            rel = self.memory.relationship.get_state()
+            inner = self.dev.state.get()
+            trace = self.cognition.process(
+                user_message,
+                context={
+                    "trust": rel["trust"],
+                    "attachment": rel["attachment"],
+                    "warmth": inner["warmth"],
+                    "irritation": inner["irritation"],
+                },
+            )
+            cognition_line = self.cognition.describe(trace)
+            context = f"{context}\n\nYour thinking:\n{cognition_line}"
+        except Exception as e:
+            print(f"⚠️ cognition.process failed: {e}")
 
         description = ruby_prompt
         if context:
@@ -186,33 +211,22 @@ class ResponseEngine:
     def wipe_all_memory(self):
         self.short_term.clear()
         self.memory.wipe_all()
-        try:
-            self.dev.wipe()
-        except Exception:
-            pass
-        try:
-            self.emotion.wipe()
-        except Exception:
-            pass
-        try:
-            self.identity.wipe()
-        except Exception:
-            pass
-        try:
-            self.social.wipe()
-        except Exception:
-            pass
+        for name, obj in [
+            ("dev", self.dev),
+            ("emotion", self.emotion),
+            ("identity", self.identity),
+            ("social", self.social),
+            ("reflection", self.reflection),
+            ("motivation", self.motivation),
+            ("cognition", self.cognition),
+        ]:
+            try:
+                obj.wipe()
+            except Exception:
+                pass
         try:
             from social.interaction_history import InteractionHistory
             InteractionHistory().wipe()
-        except Exception:
-            pass
-        try:
-            self.reflection.wipe()
-        except Exception:
-            pass
-        try:
-            self.motivation.wipe()
         except Exception:
             pass
 
@@ -248,3 +262,6 @@ class ResponseEngine:
 
     def drives_stats(self):
         return self.motivation.get_all()
+
+    def cognition_trace(self):
+        return self.cognition.last_trace()
