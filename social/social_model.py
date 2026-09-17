@@ -130,8 +130,9 @@ class SocialModel:
 
     def classify(self):
         """
-        Ruby's internal label for who this person is to her.
-        Based on trust + attachment + interactions. Not capped.
+        Returns a human-readable label for this person.
+        This is DISPLAY ONLY — it does not cap any value.
+        Trust, attachment, etc. grow without bound regardless.
         """
         m = self.get()
         if not m:
@@ -140,6 +141,7 @@ class SocialModel:
         attach = m["attachment"]
         count = m["total_interactions"]
 
+        # Ranges are just for choosing a word, not for stopping growth.
         if count < 5:
             return "stranger"
         elif trust < 2 and attach < 1:
