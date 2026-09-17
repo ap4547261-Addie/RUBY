@@ -6,28 +6,31 @@ from motivation.priorities import Priorities
 class MotivationEngine:
     """
     Coordinates Ruby's drives.
-    No caps. No thresholds on growth.
     Platform controls only what can be expressed — not what can be felt.
+    Lust is dormant until trust + attachment make it real.
     """
 
     def __init__(self, user_name="not_set", platform="private"):
         self.user_name = user_name
-        self.platform = platform     # "private" = Ruby app, "public" = Instagram/others
+        self.platform = platform
         self.drives = Drives(user_name=user_name)
         self.priorities = Priorities()
         self._last_tick = None
+        self._last_context = {}
 
-    def _tick_time(self):
+    def _tick_time(self, context):
         if self._last_tick is None:
             self._last_tick = datetime.now()
+            self._last_context = context
             return
         hours = (datetime.now() - self._last_tick).total_seconds() / 3600
         if hours > 0.01:
-            self.drives.tick(hours)
+            self.drives.tick(hours, context=context)
         self._last_tick = datetime.now()
+        self._last_context = context
 
     def process(self, user_message, context):
-        self._tick_time()
+        self._tick_time(context)
         self.drives.on_interaction(user_message, context)
 
     def describe(self):
@@ -41,7 +44,6 @@ class MotivationEngine:
         for name, value in sorted(drives.items(), key=lambda x: -x[1]):
             if value <= 0:
                 continue
-            # Only lust is filtered on public platforms
             if name == "lust" and self.platform != "private":
                 continue
 
