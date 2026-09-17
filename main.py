@@ -1,4 +1,4 @@
-# main.py - Ruby V0.6 (Memory + Internal State + Emotion)
+# main.py - Ruby V0.7 (Memory + State + Emotion + Identity)
 
 import os
 import shutil
@@ -220,10 +220,8 @@ def main(page: ft.Page):
         # --- Emotions (V0.6) ---
         try:
             emo = response_engine.emotion_stats()
-            # show only emotions that have actually fired (> 0.1)
             active = {k: v for k, v in emo.items() if v > 0.1}
             if active:
-                # sort descending by intensity
                 sorted_emo = sorted(active.items(), key=lambda x: -x[1])
                 emo_lines = [
                     ft.Text(f"{k}: {v}", size=12, color=ft.Colors.PURPLE_200)
@@ -233,6 +231,24 @@ def main(page: ft.Page):
                 emo_lines = [ft.Text("No active emotions yet.", size=12, color=ft.Colors.GREY_500)]
         except Exception as emo_ex:
             emo_lines = [ft.Text(f"Emotions unavailable: {emo_ex}", size=12, color=ft.Colors.RED_300)]
+
+        # --- Identity (V0.7) — every belief, no cap ---
+        try:
+            beliefs = response_engine.identity_stats()
+            if beliefs:
+                identity_lines = [
+                    ft.Text(
+                        f"• [{b['category']}] {b['statement']} "
+                        f"(strength {b['confidence']}, x{b['reinforced']})",
+                        size=11,
+                        color=ft.Colors.AMBER_200,
+                    )
+                    for b in beliefs
+                ]
+            else:
+                identity_lines = [ft.Text("No beliefs yet.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as ident_ex:
+            identity_lines = [ft.Text(f"Identity unavailable: {ident_ex}", size=12, color=ft.Colors.RED_300)]
 
         # --- Actions ---
         def pick_model(ev):
@@ -346,6 +362,11 @@ def main(page: ft.Page):
                     # --- Emotions (V0.6) ---
                     ft.Text("❤️ Emotions", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PURPLE_200),
                     *emo_lines,
+                    ft.Divider(),
+
+                    # --- Identity (V0.7) ---
+                    ft.Text("🪞 Identity", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.AMBER_200),
+                    *identity_lines,
                     ft.Divider(),
 
                     # --- Wipe ---
