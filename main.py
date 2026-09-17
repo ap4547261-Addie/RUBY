@@ -1,4 +1,4 @@
-# main.py - Ruby V0.9 (Memory + State + Emotion + Identity + Social + Reflection)
+# main.py - Ruby V1.0 (Memory + State + Emotion + Identity + Social + Reflection + Motivation)
 
 import os
 import shutil
@@ -23,7 +23,7 @@ def main(page: ft.Page):
     settings = SettingsManager()
 
     user_name = settings.get("user_name", "not_set")
-    response_engine = ResponseEngine(brain, user_name=user_name)
+    response_engine = ResponseEngine(brain, user_name=user_name, platform="private")
 
     # ----------------------------------------
     # UI
@@ -217,7 +217,7 @@ def main(page: ft.Page):
             inner_tension = ft.Text("", size=12)
             inner_irrit = ft.Text("", size=12)
 
-        # --- Emotions (V0.6) — no filter, show all non-zero ---
+        # --- Emotions (V0.6) ---
         try:
             emo = response_engine.emotion_stats()
             shown = {k: v for k, v in emo.items() if v != 0}
@@ -232,7 +232,7 @@ def main(page: ft.Page):
         except Exception as emo_ex:
             emo_lines = [ft.Text(f"Emotions unavailable: {emo_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Identity (V0.7) — every belief, no cap ---
+        # --- Identity (V0.7) ---
         try:
             beliefs = response_engine.identity_stats()
             if beliefs:
@@ -250,7 +250,7 @@ def main(page: ft.Page):
         except Exception as ident_ex:
             identity_lines = [ft.Text(f"Identity unavailable: {ident_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Social (V0.8) — every field, no cap ---
+        # --- Social (V0.8) ---
         try:
             social = response_engine.social_stats()
             if social:
@@ -275,10 +275,10 @@ def main(page: ft.Page):
         except Exception as social_ex:
             social_lines = [ft.Text(f"Social unavailable: {social_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Reflection (V0.9) — counts + recent reflections, no cap ---
+        # --- Reflection (V0.9) ---
         try:
             refl_counts = response_engine.reflection_stats()
-            refl_recent = response_engine.reflections_recent()  # no limit — all of them
+            refl_recent = response_engine.reflections_recent()
 
             reflection_lines = [
                 ft.Text(f"Self-reflections: {refl_counts['self_reflections']}", size=12, color=ft.Colors.TEAL_200),
@@ -288,7 +288,6 @@ def main(page: ft.Page):
 
             if refl_recent:
                 reflection_lines.append(ft.Divider(height=1))
-                # Show every reflection — no cap
                 for ts, kind, summary in refl_recent:
                     reflection_lines.append(
                         ft.Text(
@@ -303,6 +302,20 @@ def main(page: ft.Page):
                 )
         except Exception as refl_ex:
             reflection_lines = [ft.Text(f"Reflection unavailable: {refl_ex}", size=12, color=ft.Colors.RED_300)]
+
+        # --- Motivation (V1.0) — every drive, no cap ---
+        try:
+            drives = response_engine.drives_stats()
+            if drives:
+                sorted_drives = sorted(drives.items(), key=lambda x: -x[1])
+                motivation_lines = [
+                    ft.Text(f"{k}: {v}", size=12, color=ft.Colors.ORANGE_200)
+                    for k, v in sorted_drives
+                ]
+            else:
+                motivation_lines = [ft.Text("No drives yet.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as mot_ex:
+            motivation_lines = [ft.Text(f"Motivation unavailable: {mot_ex}", size=12, color=ft.Colors.RED_300)]
 
         # --- Actions ---
         def pick_model(ev):
@@ -431,6 +444,11 @@ def main(page: ft.Page):
                     # --- Reflection (V0.9) ---
                     ft.Text("🪷 Reflection", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.TEAL_200),
                     *reflection_lines,
+                    ft.Divider(),
+
+                    # --- Motivation (V1.0) ---
+                    ft.Text("🎯 Motivation", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
+                    *motivation_lines,
                     ft.Divider(),
 
                     # --- Wipe ---
