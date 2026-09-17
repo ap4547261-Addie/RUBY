@@ -1,4 +1,3 @@
-from datetime import datetime
 from memory import database
 from reflection.self_reflection import SelfReflection
 from reflection.experience_review import ExperienceReview
@@ -37,13 +36,11 @@ class ReflectionEngine:
 
         changes = {}
 
-        # internal state deltas
         for key in ("energy", "warmth", "tension", "irritation"):
             delta = current[key] - self._last_state.get(key, 0)
             if abs(delta) > 0.001:
                 changes[key] = delta
 
-        # emotion deltas
         emo_deltas = {}
         for name, value in current["emotions"].items():
             old = self._last_state.get("emotions", {}).get(name, 0)
@@ -53,7 +50,6 @@ class ReflectionEngine:
         if emo_deltas:
             changes["emotions"] = emo_deltas
 
-        # identity shift
         if current["belief_count"] != self._last_state.get("belief_count", 0):
             changes["beliefs_changed"] = current["belief_count"]
 
@@ -110,11 +106,20 @@ class ReflectionEngine:
         conn.close()
         return rows
 
+    def recent_experience_reviews(self, limit=None):
+        return self.experience_review.recent(limit=limit)
+
+    def recent_long_term(self, limit=None):
+        return self.long_term_reflection.recent(limit=limit)
+
+    def counts(self):
+        return {
+            "self_reflections": self.self_reflection.count(),
+            "experience_reviews": self.experience_review.count(),
+            "long_term_reflections": self.long_term_reflection.count(),
+        }
+
     def wipe(self):
-        conn = database.get_connection()
-        c = conn.cursor()
-        c.execute("DELETE FROM reflections")
-        c.execute("DELETE FROM experience_reviews")
-        c.execute("DELETE FROM long_term_reflections")
-        conn.commit()
-        conn.close()
+        self.self_reflection.wipe()
+        self.experience_review.wipe()
+        self.long_term_reflection.wipe()
