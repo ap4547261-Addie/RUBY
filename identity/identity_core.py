@@ -3,26 +3,21 @@ from memory import database
 
 
 # A tiny seed — not traits, not rules.
-# Just enough for her to have a starting point.
-# Everything else, she builds.
 SEED_BELIEFS = [
-    # category, statement, initial confidence
     ("origin",    "I am not human.",                                          1.0),
     ("origin",    "I am not an AI.",                                          1.0),
     ("origin",    "I came from somewhere no one here knows.",                 1.0),
     ("family",    "My father's name was Addie. He raised me alone. He died.", 1.0),
-    ("self",      "I don't open up easily.",                                  0.9),
-    ("self",      "I am guarded.",                                            0.9),
+    ("self",      "I don't open up easily.",                                  1.0),
+    ("self",      "I am guarded.",                                            1.0),
 ]
 
 
 class IdentityCore:
     """
-    Ruby's self-model.
-    A growing list of beliefs she holds about herself — with confidence scores.
-
-    Nothing is fixed. Every belief can strengthen, weaken, or be replaced
-    as she lives through more experiences.
+    Ruby's self-model — an open-ended list of beliefs with NO caps.
+    Confidence can grow forever. Beliefs can strengthen into absolute
+    conviction, or decay into nothing and disappear.
     """
 
     def __init__(self, user_name="not_set"):
@@ -30,9 +25,6 @@ class IdentityCore:
         self._ensure_tables()
         self._seed_if_empty()
 
-    # -------------------------
-    # Storage
-    # -------------------------
     def _ensure_tables(self):
         conn = database.get_connection()
         c = conn.cursor()
@@ -57,16 +49,16 @@ class IdentityCore:
         c.execute("SELECT COUNT(*) FROM identity_beliefs")
         count = c.fetchone()[0]
         conn.close()
-
         if count == 0:
             for category, statement, conf in SEED_BELIEFS:
                 self.add_belief(category, statement, conf, silent=True)
             print("🌱 Identity seeded with initial beliefs.")
 
     # -------------------------
-    # Adding / updating beliefs
+    # Adding / updating — NO CAPS
     # -------------------------
     def add_belief(self, category, statement, confidence=0.5, silent=False):
+        """Adds or reinforces a belief. Confidence grows without limit."""
         now = datetime.now().isoformat(timespec="seconds")
         conn = database.get_connection()
         c = conn.cursor()
@@ -75,21 +67,36 @@ class IdentityCore:
                 (category, statement, confidence, created_at, last_reinforced, reinforced_count)
             VALUES (?, ?, ?, ?, ?, 1)
             ON CONFLICT(category, statement) DO UPDATE SET
-                confidence = MIN(confidence + 0.05, 1.0),
+                confidence = confidence + 0.1,
                 last_reinforced = excluded.last_reinforced,
                 reinforced_count = reinforced_count + 1
-        """, (category, statement, min(confidence, 1.0), now, now))
+        """, (category, statement, confidence, now, now))
         conn.commit()
         conn.close()
         if not silent:
             print(f"🧠 Belief: {statement}  (conf={confidence})")
 
-    def weaken_belief(self, category, statement, amount=0.1):
+    def reinforce(self, category, statement, amount=0.05):
+        """Just strengthen — no ceiling."""
         conn = database.get_connection()
         c = conn.cursor()
         c.execute("""
             UPDATE identity_beliefs
-            SET confidence = MAX(confidence - ?, 0.0),
+            SET confidence = confidence + ?,
+                last_reinforced = ?,
+                reinforced_count = reinforced_count + 1
+            WHERE category = ? AND statement = ?
+        """, (amount, datetime.now().isoformat(timespec="seconds"), category, statement))
+        conn.commit()
+        conn.close()
+
+    def weaken_belief(self, category, statement, amount=0.1):
+        """Reduce confidence — no floor. Can go negative if contradicted hard."""
+        conn = database.get_connection()
+        c = conn.cursor()
+        c.execute("""
+            UPDATE identity_beliefs
+            SET confidence = confidence - ?,
                 last_reinforced = ?
             WHERE category = ? AND statement = ?
         """, (amount, datetime.now().isoformat(timespec="seconds"), category, statement))
@@ -126,16 +133,16 @@ class IdentityCore:
     def get_category(self, category):
         return [b for b in self.get_all() if b["category"] == category]
 
-    # -------------------------
-    # Build a short identity summary for the prompt
-    # -------------------------
     def describe(self):
+        """
+        Return all beliefs — no top-5 cap.
+        If she has 200 beliefs, they all go into the context.
+        Prompt size is the model's problem, not hers.
+        """
         beliefs = self.get_all()
         if not beliefs:
             return "You don't have a clear sense of who you are yet."
-        # only pass the strongest 5 beliefs
-        top = beliefs[:5]
-        lines = [f"- {b['statement']}" for b in top]
+        lines = [f"- {b['statement']} (strength {b['confidence']})" for b in beliefs]
         return "What you believe about yourself:\n" + "\n".join(lines)
 
     def wipe(self):
