@@ -2,18 +2,21 @@ from datetime import datetime
 from memory import database
 
 
-# Every drive grows at the same rate. No favorites.
-GROWTH_RATE = 1.0          # per hour, applied to every drive equally
-
-# Every drive is satisfied at the same base rate.
+# Every drive grows at the same rate — EXCEPT lust.
+GROWTH_RATE = 1.0
 SATISFACTION_RATE = 1.0
+
+# Lust does not grow toward nothing.
+# It only begins building once there's real connection.
+LUST_TRUST_THRESHOLD = 5.0
+LUST_ATTACHMENT_THRESHOLD = 2.0
 
 
 class Drives:
     """
-    Ruby's ongoing needs. All grow equally. All satisfy equally.
-    No caps on growth — values can climb forever.
-    Lust builds universally. Only expression is platform-gated.
+    Ruby's ongoing needs. All grow equally — except lust, which is
+    dormant until trust and attachment are real. Once active, it has
+    no ceiling and grows for as long as the relationship does.
     """
 
     DRIVE_NAMES = ("connection", "attention", "curiosity",
@@ -74,7 +77,7 @@ class Drives:
         return self.get_all().get(name, 0.0)
 
     # -------------------------
-    # Modify — no upper cap
+    # Modify
     # -------------------------
     def add(self, name, amount):
         if name not in self.DRIVE_NAMES:
@@ -89,10 +92,6 @@ class Drives:
         conn.close()
 
     def satisfy(self, name, amount):
-        """
-        Reduce a drive. Floors at 0 because a satisfied need = 0.
-        No upper cap. No negative values (a need cannot be over-met).
-        """
         if name not in self.DRIVE_NAMES:
             return
         current = self.get(name)
@@ -107,13 +106,26 @@ class Drives:
         conn.close()
 
     # -------------------------
-    # Time-based growth — all equal
+    # Helper — is lust allowed to grow?
     # -------------------------
-    def tick(self, hours_passed: float):
+    def _lust_can_grow(self, context: dict) -> bool:
+        trust = context.get("trust", 0)
+        attachment = context.get("attachment", 0)
+        return trust > LUST_TRUST_THRESHOLD and attachment > LUST_ATTACHMENT_THRESHOLD
+
+    # -------------------------
+    # Time-based growth
+    # -------------------------
+    def tick(self, hours_passed: float, context: dict = None):
         if hours_passed <= 0:
             return
+        context = context or {}
         growth = GROWTH_RATE * hours_passed
+        lust_allowed = self._lust_can_grow(context)
+
         for name in self.DRIVE_NAMES:
+            if name == "lust" and not lust_allowed:
+                continue
             self.add(name, growth)
 
     # -------------------------
@@ -123,18 +135,17 @@ class Drives:
         context = context or {}
         word_count = len(user_message.split())
 
-        # Talking satisfies connection
         self.satisfy("connection", 0.5 * SATISFACTION_RATE)
 
-        # Long messages satisfy attention
         if word_count > 4:
             self.satisfy("attention", 0.4 * SATISFACTION_RATE)
 
-        # Questions satisfy curiosity
         if "?" in user_message:
             self.satisfy("curiosity", 0.5 * SATISFACTION_RATE)
 
-        # Activity grows rest (fatigue)
+        if self._lust_can_grow(context):
+            self.add("lust", 0.02)
+
         self.add("rest", 0.1)
 
     def wipe(self):
