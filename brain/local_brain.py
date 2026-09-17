@@ -26,7 +26,7 @@ class LocalBrain:
     def is_loaded(self) -> bool:
         return self.model is not None
 
-    def generate(self, description: str, history: list, user_name: str = "stranger") -> str:
+    def generate(self, description: str, history: list, user_name: str = "not_set") -> str:
         if self.model is None:
             return "My brain isn't loaded yet."
 
@@ -37,20 +37,25 @@ class LocalBrain:
         try:
             result = self.model.create_chat_completion(
                 messages=messages,
-                max_tokens=35,
-                temperature=0.8,
+                max_tokens=300,          
+                temperature=0.85,
                 top_p=0.9,
-                repeat_penalty=1.35,
-                frequency_penalty=0.6,
-                presence_penalty=0.4,
+                repeat_penalty=1.3,
+                frequency_penalty=0.4,
+                presence_penalty=0.3,
+                stop=[
+                    f"{user_name}:",     
+                    "Ruby:",             
+                ],
             )
             reply = result["choices"][0]["message"]["content"].strip()
 
             # cleanup
-            reply = reply.replace("#", "").replace("*", "").strip()
+            reply = reply.replace("**", "").replace("*", "").strip()
             if reply.lower().startswith("ruby:"):
                 reply = reply[5:].strip()
-            reply = " ".join(reply.split())
+            if reply.lower().startswith(f"{user_name.lower()}:"):
+                reply = reply[len(user_name) + 1:].strip()
 
             return reply
         except Exception as error:
