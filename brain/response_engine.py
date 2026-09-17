@@ -4,6 +4,7 @@ from ruby_core.development import Development
 from emotion.emotion_engine import EmotionEngine
 from emotion.emotion_expression import EmotionExpression
 from identity.identity_development import IdentityDevelopment
+from social.social_learning import SocialLearning
 
 
 class ResponseEngine:
@@ -16,10 +17,11 @@ class ResponseEngine:
         self.emotion = EmotionEngine(user_name=user_name)        # V0.6
         self.emotion_expr = EmotionExpression()                  # V0.6
         self.identity = IdentityDevelopment(user_name=user_name) # V0.7
+        self.social = SocialLearning(subject=user_name)          # V0.8
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
         # ----------------------------------------
-        # 1. Build context (memory + relationship + internal state + emotion + identity)
+        # 1. Build context (memory + state + emotion + identity + social)
         # ----------------------------------------
         context = self.memory.build_context(user_message)
 
@@ -44,6 +46,13 @@ class ResponseEngine:
             context = f"{context}\n\n{identity_line}"
         except Exception as e:
             print(f"⚠️ identity.describe failed: {e}")
+
+        # V0.8 — social model line
+        try:
+            social_line = self.social.describe()
+            context = f"{context}\n\nWho he is to you:\n{social_line}"
+        except Exception as e:
+            print(f"⚠️ social.describe failed: {e}")
 
         description = ruby_prompt
         if context:
@@ -128,6 +137,26 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ identity.process failed: {e}")
 
+        # ----------------------------------------
+        # 9. V0.8 — social learning
+        # ----------------------------------------
+        try:
+            rel = self.memory.relationship.get_state()
+            emo = self.emotion.get_all()
+            inner = self.dev.state.get()
+            self.social.process(
+                user_message,
+                reply,
+                context={
+                    "trust": rel["trust"],
+                    "attachment": rel["attachment"],
+                    "emotions": emo,
+                    "internal_state": inner,
+                },
+            )
+        except Exception as e:
+            print(f"⚠️ social.process failed: {e}")
+
         return reply
 
     # ----------------------------------------
@@ -151,6 +180,15 @@ class ResponseEngine:
             self.identity.wipe()
         except Exception:
             pass
+        try:
+            self.social.wipe()
+        except Exception:
+            pass
+        try:
+            from social.interaction_history import InteractionHistory
+            InteractionHistory().wipe()
+        except Exception:
+            pass
 
     def memory_stats(self):
         return self.memory.stats()
@@ -166,3 +204,6 @@ class ResponseEngine:
 
     def identity_history(self):
         return self.identity.history_recent(limit=40)
+
+    def social_stats(self):
+        return self.social.model.get()
