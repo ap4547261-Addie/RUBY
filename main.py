@@ -1,4 +1,5 @@
 # main.py - Ruby V0.7 (Memory + State + Emotion + Identity)
+# No limits on emotions, identity, or memory growth.
 
 import os
 import shutil
@@ -52,7 +53,7 @@ def main(page: ft.Page):
         try:
             from memory.episodic_memory import EpisodicMemory
             ep = EpisodicMemory()
-            rows = ep.get_recent(limit=30)
+            rows = ep.get_recent(limit=200)
             for user_msg, ruby_reply, _ts in reversed(rows):
                 chat.controls.append(
                     ft.Text(f"You: {user_msg}", selectable=True, size=16, color=ft.Colors.CYAN_400)
@@ -217,12 +218,12 @@ def main(page: ft.Page):
             inner_tension = ft.Text("", size=12)
             inner_irrit = ft.Text("", size=12)
 
-        # --- Emotions (V0.6) ---
+        # --- Emotions (V0.6) — no filter, show all non-zero ---
         try:
             emo = response_engine.emotion_stats()
-            active = {k: v for k, v in emo.items() if v > 0.1}
-            if active:
-                sorted_emo = sorted(active.items(), key=lambda x: -x[1])
+            shown = {k: v for k, v in emo.items() if v != 0}
+            if shown:
+                sorted_emo = sorted(shown.items(), key=lambda x: -abs(x[1]))
                 emo_lines = [
                     ft.Text(f"{k}: {v}", size=12, color=ft.Colors.PURPLE_200)
                     for k, v in sorted_emo
