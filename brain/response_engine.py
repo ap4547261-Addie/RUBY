@@ -3,6 +3,7 @@ from memory.memory_consolidation import MemoryConsolidation
 from ruby_core.development import Development
 from emotion.emotion_engine import EmotionEngine
 from emotion.emotion_expression import EmotionExpression
+from identity.identity_development import IdentityDevelopment
 
 
 class ResponseEngine:
@@ -11,13 +12,14 @@ class ResponseEngine:
         self.user_name = user_name
         self.short_term = ShortTermMemory(max_messages=10)
         self.memory = MemoryConsolidation(user_name=user_name)
-        self.dev = Development(user_name=user_name)          # V0.5
-        self.emotion = EmotionEngine(user_name=user_name)    # V0.6
-        self.emotion_expr = EmotionExpression()              # V0.6
+        self.dev = Development(user_name=user_name)              # V0.5
+        self.emotion = EmotionEngine(user_name=user_name)        # V0.6
+        self.emotion_expr = EmotionExpression()                  # V0.6
+        self.identity = IdentityDevelopment(user_name=user_name) # V0.7
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
         # ----------------------------------------
-        # 1. Build context (memory + relationship + internal state)
+        # 1. Build context (memory + relationship + internal state + emotion + identity)
         # ----------------------------------------
         context = self.memory.build_context(user_message)
 
@@ -35,6 +37,13 @@ class ResponseEngine:
             context = f"{context}\n\nYour feelings right now: {emotion_line}"
         except Exception as e:
             print(f"⚠️ emotion.describe failed: {e}")
+
+        # V0.7 — self-model line
+        try:
+            identity_line = self.identity.describe()
+            context = f"{context}\n\n{identity_line}"
+        except Exception as e:
+            print(f"⚠️ identity.describe failed: {e}")
 
         description = ruby_prompt
         if context:
@@ -98,6 +107,27 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.process failed: {e}")
 
+        # ----------------------------------------
+        # 8. V0.7 — identity development
+        # ----------------------------------------
+        try:
+            rel = self.memory.relationship.get_state()
+            emo = self.emotion.get_all()
+            inner = self.dev.state.get()
+            self.identity.process(
+                user_message,
+                reply,
+                context={
+                    "trust": rel["trust"],
+                    "attachment": rel["attachment"],
+                    "emotions": emo,
+                    "irritation": inner["irritation"],
+                    "warmth": inner["warmth"],
+                },
+            )
+        except Exception as e:
+            print(f"⚠️ identity.process failed: {e}")
+
         return reply
 
     # ----------------------------------------
@@ -117,6 +147,10 @@ class ResponseEngine:
             self.emotion.wipe()
         except Exception:
             pass
+        try:
+            self.identity.wipe()
+        except Exception:
+            pass
 
     def memory_stats(self):
         return self.memory.stats()
@@ -126,3 +160,9 @@ class ResponseEngine:
 
     def internal_state_stats(self):
         return self.dev.state.get()
+
+    def identity_stats(self):
+        return self.identity.beliefs()
+
+    def identity_history(self):
+        return self.identity.history_recent(limit=10)
