@@ -6,13 +6,14 @@ from reflection.long_term_reflection import LongTermReflection
 
 # Ignore tiny drift — only react to meaningful change
 STATE_CHANGE_THRESHOLD = 0.5
-EMOTION_CHANGE_THRESHOLD = 0.2
+EMOTION_CHANGE_THRESHOLD = 0.5
 
 
 class ReflectionEngine:
     """
     Reflects only on meaningful change.
-    Ignores the tiny drift that every message causes.
+    Confidence drift on beliefs does NOT trigger reflection —
+    only new beliefs or belief-count changes.
     """
 
     def __init__(self, user_name="not_set"):
@@ -22,6 +23,12 @@ class ReflectionEngine:
         self.long_term_reflection = LongTermReflection(user_name=user_name)
         self._last_state = None
 
+    def _belief_identity(self, beliefs):
+        """Only the statement list — NOT confidence."""
+        if not beliefs:
+            return ""
+        return "|".join(sorted(b["statement"] for b in beliefs))
+
     def _snapshot(self, internal_state, emotions, beliefs):
         return {
             "energy": internal_state.get("energy", 0),
@@ -29,10 +36,7 @@ class ReflectionEngine:
             "tension": internal_state.get("tension", 0),
             "irritation": internal_state.get("irritation", 0),
             "emotions": dict(emotions),
-            "belief_signature": "|".join(
-                sorted(f"{b['statement']}:{round(b['confidence'], 2)}"
-                       for b in (beliefs or []))
-            ),
+            "belief_identity": self._belief_identity(beliefs),
         }
 
     def _changes_since_last(self, internal_state, emotions, beliefs):
@@ -44,11 +48,13 @@ class ReflectionEngine:
 
         changes = {}
 
+        # Internal state — only if a REAL shift happened
         for key in ("energy", "warmth", "tension", "irritation"):
             delta = current[key] - self._last_state.get(key, 0)
             if abs(delta) > STATE_CHANGE_THRESHOLD:
                 changes[key] = delta
 
+        # Emotions — only if they moved meaningfully
         emo_changes = {}
         for name, value in current["emotions"].items():
             old = self._last_state.get("emotions", {}).get(name, 0)
@@ -57,7 +63,8 @@ class ReflectionEngine:
         if emo_changes:
             changes["emotions"] = emo_changes
 
-        if current["belief_signature"] != self._last_state.get("belief_signature", ""):
+        # Beliefs — only if the STATEMENT LIST changed (new belief added/removed)
+        if current["belief_identity"] != self._last_state.get("belief_identity", ""):
             changes["beliefs_changed"] = True
 
         self._last_state = current
