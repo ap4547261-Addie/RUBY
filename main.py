@@ -1,4 +1,4 @@
-# main.py - Ruby V0.8 (Memory + State + Emotion + Identity + Social)
+# main.py - Ruby V0.9 (Memory + State + Emotion + Identity + Social + Reflection)
 
 import os
 import shutil
@@ -275,6 +275,35 @@ def main(page: ft.Page):
         except Exception as social_ex:
             social_lines = [ft.Text(f"Social unavailable: {social_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Reflection (V0.9) — counts + recent reflections, no cap ---
+        try:
+            refl_counts = response_engine.reflection_stats()
+            refl_recent = response_engine.reflections_recent()  # no limit — all of them
+
+            reflection_lines = [
+                ft.Text(f"Self-reflections: {refl_counts['self_reflections']}", size=12, color=ft.Colors.TEAL_200),
+                ft.Text(f"Experience reviews: {refl_counts['experience_reviews']}", size=12, color=ft.Colors.TEAL_200),
+                ft.Text(f"Long-term reflections: {refl_counts['long_term_reflections']}", size=12, color=ft.Colors.TEAL_200),
+            ]
+
+            if refl_recent:
+                reflection_lines.append(ft.Divider(height=1))
+                # Show every reflection — no cap
+                for ts, kind, summary in refl_recent:
+                    reflection_lines.append(
+                        ft.Text(
+                            f"[{kind}] {summary}",
+                            size=11,
+                            color=ft.Colors.TEAL_100,
+                        )
+                    )
+            else:
+                reflection_lines.append(
+                    ft.Text("No reflections yet.", size=12, color=ft.Colors.GREY_500)
+                )
+        except Exception as refl_ex:
+            reflection_lines = [ft.Text(f"Reflection unavailable: {refl_ex}", size=12, color=ft.Colors.RED_300)]
+
         # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
@@ -397,6 +426,11 @@ def main(page: ft.Page):
                     # --- Social (V0.8) ---
                     ft.Text("🧑 Social", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_GREEN_200),
                     *social_lines,
+                    ft.Divider(),
+
+                    # --- Reflection (V0.9) ---
+                    ft.Text("🪷 Reflection", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.TEAL_200),
+                    *reflection_lines,
                     ft.Divider(),
 
                     # --- Wipe ---
