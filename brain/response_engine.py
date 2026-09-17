@@ -165,4 +165,4 @@ class ResponseEngine:
         return self.identity.beliefs()
 
     def identity_history(self):
-        return self.identity.history_recent(limit=10)
+        return self.identity.history_recent(limit=40)
