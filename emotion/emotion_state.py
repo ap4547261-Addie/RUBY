@@ -2,9 +2,9 @@ from datetime import datetime
 from memory import database
 
 
-# Emotion decay rates — how fast each fades per hour
-# Love and attachment decay slowly; irritation and anger fast.
-DECAY_RATES = {
+# Base decay rates per hour. The ACTUAL rate scales with intensity —
+# strong emotions burn slower. Nothing is fixed.
+BASE_DECAY = {
     "joy":        0.30,
     "warmth":     0.05,
     "love":       0.005,
@@ -21,12 +21,14 @@ DECAY_RATES = {
     "guilt":      0.15,
 }
 
+DECAY_RATES = BASE_DECAY  # backward compat
+
 
 class EmotionState:
     """
-    Holds Ruby's active emotions as (name → intensity) pairs.
-    Values grow without cap. They decay over time.
-    Persisted in SQLite so emotions survive restarts.
+    Ruby's emotions. No caps, no floors.
+    Values grow forever. Decay scales with magnitude.
+    Negative values are valid — they also drift toward zero.
     """
 
     def __init__(self, user_name="not_set"):
@@ -88,18 +90,18 @@ class EmotionState:
         row = c.fetchone()
         conn.close()
         if not row:
-            return {k: 0.0 for k in DECAY_RATES}
-        keys = list(DECAY_RATES.keys())
+            return {k: 0.0 for k in BASE_DECAY}
+        keys = list(BASE_DECAY.keys())
         return {k: round(row[i], 3) for i, k in enumerate(keys)}
 
     def get(self, name):
         return self.get_all().get(name, 0.0)
 
     # -------------------------
-    # Modify (no caps)
+    # Modify — no caps, no floors
     # -------------------------
     def add(self, name, amount):
-        if name not in DECAY_RATES:
+        if name not in BASE_DECAY:
             return
         conn = database.get_connection()
         c = conn.cursor()
@@ -117,7 +119,7 @@ class EmotionState:
                 self.add(name, amount)
 
     def set(self, name, value):
-        if name not in DECAY_RATES:
+        if name not in BASE_DECAY:
             return
         conn = database.get_connection()
         c = conn.cursor()
@@ -130,32 +132,55 @@ class EmotionState:
         conn.close()
 
     # -------------------------
-    # Time-based decay
+    # Time-based decay — scales with intensity, no floors
     # -------------------------
     def decay(self, hours_passed: float):
+        """
+        Bigger emotions decay slower (inertia).
+        Both positive AND negative values drift toward zero.
+        No floors, no caps.
+        """
         if hours_passed <= 0:
             return
+
         state = self.get_all()
         for name, value in state.items():
-            if value <= 0:
+            if value == 0:
                 continue
-            rate = DECAY_RATES.get(name, 0.1)
-            # proportional decay — bigger values decay faster
-            drop = value * rate * hours_passed / 24.0
-            self.add(name, -min(value, drop))
-        # refresh last_updated
-        self.set("joy", self.get("joy"))  # touches the row
+
+            base = BASE_DECAY.get(name, 0.1)
+
+            # inertia — the stronger the feeling, the slower its fade
+            # e.g., value 100 → 10× slower; value 10000 → 100× slower
+            inertia = 1.0 + (abs(value) ** 0.5)
+            rate = base / inertia
+
+            drop = abs(value) * rate * hours_passed / 24.0
+
+            if value > 0:
+                self.add(name, -min(value, drop))
+            else:
+                # negative value drifts UP toward zero
+                self.add(name, min(abs(value), drop))
+
+        # touch the row so last_updated reflects the decay
+        self.set("joy", self.get("joy"))
 
     # -------------------------
-    # Summary
+    # Summary — no thresholds
     # -------------------------
     def dominant(self):
-        """Return the strongest currently-active emotion."""
+        """Return the strongest emotion, whatever it is. No cutoff."""
         state = self.get_all()
-        active = {k: v for k, v in state.items() if v > 0.5}
+        active = {k: v for k, v in state.items() if v != 0}
         if not active:
             return None
-        return max(active, key=active.get)
+        return max(active, key=lambda k: abs(active[k]))
+
+    def active(self, min_magnitude=0.0):
+        """Return all emotions above min_magnitude. Default: any non-zero."""
+        state = self.get_all()
+        return {k: v for k, v in state.items() if abs(v) > min_magnitude}
 
     def wipe(self):
         conn = database.get_connection()
