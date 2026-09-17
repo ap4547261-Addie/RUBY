@@ -1,5 +1,4 @@
-# main.py - Ruby V0.7 (Memory + State + Emotion + Identity)
-# No limits on emotions, identity, or memory growth.
+# main.py - Ruby V0.8 (Memory + State + Emotion + Identity + Social)
 
 import os
 import shutil
@@ -251,6 +250,31 @@ def main(page: ft.Page):
         except Exception as ident_ex:
             identity_lines = [ft.Text(f"Identity unavailable: {ident_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Social (V0.8) — every field, no cap ---
+        try:
+            social = response_engine.social_stats()
+            if social:
+                social_lines = [
+                    ft.Text(f"Subject: {social['subject']}", size=12, color=ft.Colors.LIGHT_GREEN_200),
+                    ft.Text(f"Relationship: {social['relationship_type']}", size=12, color=ft.Colors.LIGHT_GREEN_200),
+                    ft.Text(f"Interactions: {social['total_interactions']}", size=12, color=ft.Colors.LIGHT_GREEN_200),
+                    ft.Text(f"Trust: {social['trust']}", size=12, color=ft.Colors.LIGHT_GREEN_200),
+                    ft.Text(f"Familiarity: {social['familiarity']}", size=12, color=ft.Colors.LIGHT_GREEN_200),
+                    ft.Text(f"Attachment: {social['attachment']}", size=12, color=ft.Colors.LIGHT_GREEN_200),
+                    ft.Text(f"Respect: {social['respect']}", size=12, color=ft.Colors.LIGHT_GREEN_200),
+                    ft.Text(f"Perceived state: {social['perceived_emotional_state']}", size=12, color=ft.Colors.LIGHT_GREEN_200),
+                    ft.Text(f"First seen: {social['first_seen']}", size=11, color=ft.Colors.GREY_500),
+                    ft.Text(f"Last seen: {social['last_seen']}", size=11, color=ft.Colors.GREY_500),
+                ]
+                if social.get("notes"):
+                    social_lines.append(
+                        ft.Text(f"Notes: {social['notes']}", size=11, color=ft.Colors.GREY_400)
+                    )
+            else:
+                social_lines = [ft.Text("No social model yet.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as social_ex:
+            social_lines = [ft.Text(f"Social unavailable: {social_ex}", size=12, color=ft.Colors.RED_300)]
+
         # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
@@ -368,6 +392,11 @@ def main(page: ft.Page):
                     # --- Identity (V0.7) ---
                     ft.Text("🪞 Identity", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.AMBER_200),
                     *identity_lines,
+                    ft.Divider(),
+
+                    # --- Social (V0.8) ---
+                    ft.Text("🧑 Social", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_GREEN_200),
+                    *social_lines,
                     ft.Divider(),
 
                     # --- Wipe ---
