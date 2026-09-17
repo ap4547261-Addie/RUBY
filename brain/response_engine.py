@@ -5,6 +5,7 @@ from emotion.emotion_engine import EmotionEngine
 from emotion.emotion_expression import EmotionExpression
 from identity.identity_development import IdentityDevelopment
 from social.social_learning import SocialLearning
+from reflection.reflection_engine import ReflectionEngine
 
 
 class ResponseEngine:
@@ -18,21 +19,20 @@ class ResponseEngine:
         self.emotion_expr = EmotionExpression()                  # V0.6
         self.identity = IdentityDevelopment(user_name=user_name) # V0.7
         self.social = SocialLearning(subject=user_name)          # V0.8
+        self.reflection = ReflectionEngine(user_name=user_name)  # V0.9
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
         # ----------------------------------------
-        # 1. Build context (memory + state + emotion + identity + social)
+        # 1. Build context
         # ----------------------------------------
         context = self.memory.build_context(user_message)
 
-        # V0.5 — internal state line
         try:
             inner_line = self.dev.describe()
             context = f"{context}\n\nYour body and mood: {inner_line}"
         except Exception as e:
             print(f"⚠️ dev.describe failed: {e}")
 
-        # V0.6 — emotional state line
         try:
             emotions = self.emotion.get_all()
             emotion_line = self.emotion_expr.describe(emotions)
@@ -40,14 +40,12 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.describe failed: {e}")
 
-        # V0.7 — self-model line
         try:
             identity_line = self.identity.describe()
             context = f"{context}\n\n{identity_line}"
         except Exception as e:
             print(f"⚠️ identity.describe failed: {e}")
 
-        # V0.8 — social model line
         try:
             social_line = self.social.describe()
             context = f"{context}\n\nWho he is to you:\n{social_line}"
@@ -58,33 +56,23 @@ class ResponseEngine:
         if context:
             description = f"{ruby_prompt}\n\n{context}"
 
-        # ----------------------------------------
-        # 2. Add new user message to short-term
-        # ----------------------------------------
+        # 2. Short-term
         self.short_term.add("user", user_message)
 
-        # ----------------------------------------
-        # 3. Generate reply
-        # ----------------------------------------
+        # 3. Generate
         reply = self.brain.generate(
             description=description,
             history=self.short_term.get_messages(),
             user_name=self.user_name,
         )
 
-        # ----------------------------------------
-        # 4. Store reply in short-term
-        # ----------------------------------------
+        # 4. Store reply
         self.short_term.add("assistant", reply)
 
-        # ----------------------------------------
-        # 5. Consolidate into long-term memory
-        # ----------------------------------------
+        # 5. Long-term memory
         self.memory.process(user_message, reply)
 
-        # ----------------------------------------
-        # 6. V0.5 — internal state tick + reaction
-        # ----------------------------------------
+        # 6. V0.5
         try:
             self.dev.tick()
             rel = self.memory.relationship.get_state()
@@ -97,9 +85,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ dev.on_message failed: {e}")
 
-        # ----------------------------------------
-        # 7. V0.6 — emotion tick + appraisal
-        # ----------------------------------------
+        # 7. V0.6
         try:
             rel = self.memory.relationship.get_state()
             inner = self.dev.state.get()
@@ -116,9 +102,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.process failed: {e}")
 
-        # ----------------------------------------
-        # 8. V0.7 — identity development
-        # ----------------------------------------
+        # 8. V0.7
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -137,9 +121,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ identity.process failed: {e}")
 
-        # ----------------------------------------
-        # 9. V0.8 — social learning
-        # ----------------------------------------
+        # 9. V0.8
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -156,6 +138,21 @@ class ResponseEngine:
             )
         except Exception as e:
             print(f"⚠️ social.process failed: {e}")
+
+        # 10. V0.9
+        try:
+            rel = self.memory.relationship.get_state()
+            emo = self.emotion.get_all()
+            inner = self.dev.state.get()
+            beliefs = self.identity.beliefs()
+            self.reflection.process(
+                internal_state=inner,
+                emotions=emo,
+                beliefs=beliefs,
+                message_count=rel["message_count"],
+            )
+        except Exception as e:
+            print(f"⚠️ reflection.process failed: {e}")
 
         return reply
 
@@ -189,6 +186,10 @@ class ResponseEngine:
             InteractionHistory().wipe()
         except Exception:
             pass
+        try:
+            self.reflection.wipe()
+        except Exception:
+            pass
 
     def memory_stats(self):
         return self.memory.stats()
@@ -207,3 +208,15 @@ class ResponseEngine:
 
     def social_stats(self):
         return self.social.model.get()
+
+    def reflection_stats(self):
+        return self.reflection.counts()
+
+    def reflections_recent(self, limit=None):
+        return self.reflection.recent_reflections(limit=limit)
+
+    def experience_reviews_recent(self, limit=None):
+        return self.reflection.recent_experience_reviews(limit=limit)
+
+    def long_term_reflections_recent(self, limit=None):
+        return self.reflection.recent_long_term(limit=limit)
