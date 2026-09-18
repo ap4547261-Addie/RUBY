@@ -1,4 +1,4 @@
-# main.py - Ruby V1.2 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition)
+# main.py - Ruby V1.3 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning)
 
 import os
 import shutil
@@ -46,7 +46,7 @@ def main(page: ft.Page):
         page.update()
 
     # ----------------------------------------
-    # Load chat history on startup
+    # Load chat history
     # ----------------------------------------
     def load_chat_history():
         try:
@@ -140,7 +140,7 @@ def main(page: ft.Page):
     # Settings Dialog
     # ----------------------------------------
     def open_settings(e):
-        # --- Account fields ---
+        # --- Account ---
         name_field = ft.TextField(
             label="Name",
             value=settings.get("user_name", ""),
@@ -159,7 +159,7 @@ def main(page: ft.Page):
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
-        # --- Brain fields ---
+        # --- Brain ---
         model_name_label = ft.Text(
             settings.get("model_name") or "No model selected",
             size=13, color=ft.Colors.GREY_400,
@@ -177,14 +177,10 @@ def main(page: ft.Page):
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
-        # --- Backup label ---
         last_backup = settings.get("last_backup") or "Never"
-        backup_label = ft.Text(
-            f"Last backup: {last_backup}",
-            size=12, color=ft.Colors.GREY_400,
-        )
+        backup_label = ft.Text(f"Last backup: {last_backup}", size=12, color=ft.Colors.GREY_400)
 
-        # --- Memory stats (V0.4) ---
+        # --- Memory (V0.4) ---
         try:
             stats = response_engine.memory_stats()
             rel = stats["relationship"]
@@ -240,8 +236,7 @@ def main(page: ft.Page):
                     ft.Text(
                         f"• [{b['category']}] {b['statement']} "
                         f"(strength {b['confidence']}, x{b['reinforced']})",
-                        size=11,
-                        color=ft.Colors.AMBER_200,
+                        size=11, color=ft.Colors.AMBER_200,
                     )
                     for b in beliefs
                 ]
@@ -279,27 +274,19 @@ def main(page: ft.Page):
         try:
             refl_counts = response_engine.reflection_stats()
             refl_recent = response_engine.reflections_recent()
-
             reflection_lines = [
                 ft.Text(f"Self-reflections: {refl_counts['self_reflections']}", size=12, color=ft.Colors.TEAL_200),
                 ft.Text(f"Experience reviews: {refl_counts['experience_reviews']}", size=12, color=ft.Colors.TEAL_200),
                 ft.Text(f"Long-term reflections: {refl_counts['long_term_reflections']}", size=12, color=ft.Colors.TEAL_200),
             ]
-
             if refl_recent:
                 reflection_lines.append(ft.Divider(height=1))
                 for ts, kind, summary in refl_recent:
                     reflection_lines.append(
-                        ft.Text(
-                            f"[{kind}] {summary}",
-                            size=11,
-                            color=ft.Colors.TEAL_100,
-                        )
+                        ft.Text(f"[{kind}] {summary}", size=11, color=ft.Colors.TEAL_100)
                     )
             else:
-                reflection_lines.append(
-                    ft.Text("No reflections yet.", size=12, color=ft.Colors.GREY_500)
-                )
+                reflection_lines.append(ft.Text("No reflections yet.", size=12, color=ft.Colors.GREY_500))
         except Exception as refl_ex:
             reflection_lines = [ft.Text(f"Reflection unavailable: {refl_ex}", size=12, color=ft.Colors.RED_300)]
 
@@ -349,14 +336,62 @@ def main(page: ft.Page):
         except Exception as cog_ex:
             cognition_lines = [ft.Text(f"Cognition unavailable: {cog_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Learning (V1.3) ---
+        try:
+            learning_lines = []
+
+            # error counts
+            err_summary = response_engine.learning_summary()
+            if err_summary:
+                for direction, count in err_summary.items():
+                    learning_lines.append(
+                        ft.Text(f"Errors — {direction}: {count}", size=11, color=ft.Colors.LIME_200)
+                    )
+            else:
+                learning_lines.append(ft.Text("No prediction errors yet.", size=11, color=ft.Colors.GREY_500))
+
+            # recent prediction errors
+            recent_errors = response_engine.recent_prediction_errors(limit=5)
+            if recent_errors:
+                learning_lines.append(ft.Divider(height=1))
+                for ts, predicted, actual, mag, direction in recent_errors:
+                    learning_lines.append(
+                        ft.Text(
+                            f"[{direction}] predicted '{predicted}' got '{actual}' (mag {round(mag, 2)})",
+                            size=10, color=ft.Colors.LIME_100,
+                        )
+                    )
+
+            # preferences
+            prefs = response_engine.preference_stats()
+            if prefs:
+                learning_lines.append(ft.Divider(height=1))
+                for topic, feeling, seen in prefs[:8]:
+                    learning_lines.append(
+                        ft.Text(f"• {topic}: {round(feeling, 2)} (seen {seen})",
+                                size=11, color=ft.Colors.LIME_200)
+                    )
+
+            # best behaviors
+            best = response_engine.best_behaviors(limit=3)
+            if best:
+                learning_lines.append(ft.Divider(height=1))
+                for intent, tone, score, used in best:
+                    learning_lines.append(
+                        ft.Text(f"Best: {intent}/{tone} — score {round(score, 2)} (used {used})",
+                                size=11, color=ft.Colors.LIME_200)
+                    )
+
+            if not learning_lines:
+                learning_lines = [ft.Text("Nothing learned yet.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as learn_ex:
+            learning_lines = [ft.Text(f"Learning unavailable: {learn_ex}", size=12, color=ft.Colors.RED_300)]
+
         # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
             file_picker_mode["action"] = "model"
-            file_picker.pick_files(
-                allow_multiple=False,
-                file_type=ft.FilePickerFileType.ANY,
-            )
+            file_picker.pick_files(allow_multiple=False, file_type=ft.FilePickerFileType.ANY)
 
         def save_and_close(ev):
             try:
@@ -364,7 +399,6 @@ def main(page: ft.Page):
                 thr = int(threads_field.value or 4)
             except ValueError:
                 ctx, thr = 1024, 4
-
             settings.update({
                 "user_name": name_field.value.strip() or "not_set",
                 "user_phone": phone_field.value.strip(),
@@ -388,10 +422,7 @@ def main(page: ft.Page):
         def do_import(ev):
             page.close(settings_dialog)
             file_picker_mode["action"] = "import_backup"
-            file_picker.pick_files(
-                allow_multiple=False,
-                file_type=ft.FilePickerFileType.ANY,
-            )
+            file_picker.pick_files(allow_multiple=False, file_type=ft.FilePickerFileType.ANY)
 
         def do_wipe_memory(ev):
             try:
@@ -418,114 +449,71 @@ def main(page: ft.Page):
             title=ft.Text("⚙️ Settings"),
             content=ft.Column(
                 [
-                    # --- Account ---
                     ft.Text("👤 Account", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
-                    name_field,
-                    phone_field,
-                    email_field,
+                    name_field, phone_field, email_field,
                     ft.ElevatedButton("🔐 Sign in with Google", disabled=True, width=340),
                     ft.Divider(),
 
-                    # --- Brain ---
                     ft.Text("🧠 Brain", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     model_name_label,
-                    ft.ElevatedButton(
-                        "Choose Model File",
-                        icon=ft.Icons.UPLOAD_FILE,
-                        on_click=pick_model,
-                        width=340,
-                    ),
-                    context_field,
-                    threads_field,
+                    ft.ElevatedButton("Choose Model File", icon=ft.Icons.UPLOAD_FILE,
+                                      on_click=pick_model, width=340),
+                    context_field, threads_field,
                     ft.Divider(),
 
-                    # --- Memory (V0.4) ---
                     ft.Text("💭 Memory", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
-                    mem_episodes,
-                    mem_facts,
-                    mem_msgs,
-                    mem_trust,
-                    mem_fam,
-                    mem_resp,
-                    mem_att,
+                    mem_episodes, mem_facts, mem_msgs, mem_trust, mem_fam, mem_resp, mem_att,
                     ft.Divider(),
 
-                    # --- Internal State (V0.5) ---
                     ft.Text("🧬 Internal State", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_300),
-                    inner_energy,
-                    inner_warmth,
-                    inner_tension,
-                    inner_irrit,
+                    inner_energy, inner_warmth, inner_tension, inner_irrit,
                     ft.Divider(),
 
-                    # --- Emotions (V0.6) ---
                     ft.Text("❤️ Emotions", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PURPLE_200),
                     *emo_lines,
                     ft.Divider(),
 
-                    # --- Identity (V0.7) ---
                     ft.Text("🪞 Identity", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.AMBER_200),
                     *identity_lines,
                     ft.Divider(),
 
-                    # --- Social (V0.8) ---
                     ft.Text("🧑 Social", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_GREEN_200),
                     *social_lines,
                     ft.Divider(),
 
-                    # --- Reflection (V0.9) ---
                     ft.Text("🪷 Reflection", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.TEAL_200),
                     *reflection_lines,
                     ft.Divider(),
 
-                    # --- Motivation (V1.0) ---
                     ft.Text("🎯 Motivation", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
                     *motivation_lines,
                     ft.Divider(),
 
-                    # --- Cognition (V1.2) ---
                     ft.Text("🧠 Cognition", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_200),
                     *cognition_lines,
                     ft.Divider(),
 
-                    # --- Wipe ---
-                    ft.ElevatedButton(
-                        "Wipe All Memory",
-                        icon=ft.Icons.DELETE_FOREVER,
-                        on_click=do_wipe_memory,
-                        width=340,
-                    ),
+                    ft.Text("🎓 Learning", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIME_200),
+                    *learning_lines,
                     ft.Divider(),
 
-                    # --- Backup ---
+                    ft.ElevatedButton("Wipe All Memory", icon=ft.Icons.DELETE_FOREVER,
+                                      on_click=do_wipe_memory, width=340),
+                    ft.Divider(),
+
                     ft.Text("💾 Backup", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     backup_label,
-                    ft.Row(
-                        [
-                            ft.ElevatedButton(
-                                "Export",
-                                icon=ft.Icons.DOWNLOAD,
-                                on_click=do_export,
-                            ),
-                            ft.ElevatedButton(
-                                "Import",
-                                icon=ft.Icons.UPLOAD,
-                                on_click=do_import,
-                            ),
-                        ],
-                        alignment=ft.MainAxisAlignment.START,
-                    ),
+                    ft.Row([
+                        ft.ElevatedButton("Export", icon=ft.Icons.DOWNLOAD, on_click=do_export),
+                        ft.ElevatedButton("Import", icon=ft.Icons.UPLOAD, on_click=do_import),
+                    ], alignment=ft.MainAxisAlignment.START),
                     ft.Divider(),
 
-                    # --- Integrations ---
                     ft.Text("🔗 Integrations", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     ft.Text("Pinecone: Not connected", size=13, color=ft.Colors.GREY_400),
                     ft.Text("Instagram: Not connected", size=13, color=ft.Colors.GREY_400),
                 ],
-                tight=True,
-                spacing=10,
-                width=360,
-                scroll=ft.ScrollMode.AUTO,
+                tight=True, spacing=10, width=360, scroll=ft.ScrollMode.AUTO,
             ),
             actions=[
                 ft.TextButton("Save", on_click=save_and_close),
@@ -541,7 +529,6 @@ def main(page: ft.Page):
         msg = message_box.value.strip()
         if not msg:
             return
-
         message_box.value = ""
         add_message("You", msg, is_user=True)
 
@@ -565,26 +552,16 @@ def main(page: ft.Page):
     # Layout
     # ----------------------------------------
     message_box = ft.TextField(
-        hint_text="Talk to Ruby...",
-        expand=True,
-        multiline=False,
-        on_submit=send_message,
-        bgcolor="#18181C",
-        color=ft.Colors.WHITE,
-        border_color="#3A3A46",
-        focused_border_color=ft.Colors.PINK_400,
+        hint_text="Talk to Ruby...", expand=True, multiline=False,
+        on_submit=send_message, bgcolor="#18181C", color=ft.Colors.WHITE,
+        border_color="#3A3A46", focused_border_color=ft.Colors.PINK_400,
     )
-
     settings_button = ft.IconButton(
-        icon=ft.Icons.SETTINGS,
-        on_click=open_settings,
-        icon_color=ft.Colors.GREY_400,
-        tooltip="Settings",
+        icon=ft.Icons.SETTINGS, on_click=open_settings,
+        icon_color=ft.Colors.GREY_400, tooltip="Settings",
     )
-
     send_button = ft.IconButton(
-        icon=ft.Icons.SEND,
-        on_click=send_message,
+        icon=ft.Icons.SEND, on_click=send_message,
         icon_color=ft.Colors.PINK_400,
     )
 
@@ -602,9 +579,6 @@ def main(page: ft.Page):
         ft.Row(controls=[message_box, send_button]),
     )
 
-    # ----------------------------------------
-    # Restore previous chat + auto-load model
-    # ----------------------------------------
     load_chat_history()
     page.update()
 
