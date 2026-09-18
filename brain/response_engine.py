@@ -11,8 +11,7 @@ from cognition.cognition_engine import CognitionEngine
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
 
-# V1.5 — optional. If evolution files are missing or broken,
-# the app still loads and everything else works.
+# V1.5 — optional
 try:
     from evolution.development_engine import DevelopmentEngine
     EVOLUTION_AVAILABLE = True
@@ -20,6 +19,15 @@ except Exception as e:
     print(f"⚠️ Evolution layer not available: {e}")
     EVOLUTION_AVAILABLE = False
     DevelopmentEngine = None
+
+# V1.6 — optional
+try:
+    from integrations.integration_engine import IntegrationEngine
+    INTEGRATIONS_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Integrations layer not available: {e}")
+    INTEGRATIONS_AVAILABLE = False
+    IntegrationEngine = None
 
 
 class ResponseEngine:
@@ -29,18 +37,18 @@ class ResponseEngine:
         self.platform = platform
         self.short_term = ShortTermMemory(max_messages=10)
         self.memory = MemoryConsolidation(user_name=user_name)
-        self.dev = Development(user_name=user_name)                    # V0.5
-        self.emotion = EmotionEngine(user_name=user_name)              # V0.6
-        self.emotion_expr = EmotionExpression()                        # V0.6
-        self.identity = IdentityDevelopment(user_name=user_name)       # V0.7
-        self.social = SocialLearning(subject=user_name)                # V0.8
-        self.reflection = ReflectionEngine(user_name=user_name)        # V0.9
-        self.motivation = MotivationEngine(user_name=user_name, platform=platform)  # V1.0
-        self.cognition = CognitionEngine(user_name=user_name)          # V1.2
-        self.learning = LearningEngine(user_name=user_name)            # V1.3
-        self.personality = PersonalityDevelopment(user_name=user_name) # V1.4
+        self.dev = Development(user_name=user_name)
+        self.emotion = EmotionEngine(user_name=user_name)
+        self.emotion_expr = EmotionExpression()
+        self.identity = IdentityDevelopment(user_name=user_name)
+        self.social = SocialLearning(subject=user_name)
+        self.reflection = ReflectionEngine(user_name=user_name)
+        self.motivation = MotivationEngine(user_name=user_name, platform=platform)
+        self.cognition = CognitionEngine(user_name=user_name)
+        self.learning = LearningEngine(user_name=user_name)
+        self.personality = PersonalityDevelopment(user_name=user_name)
 
-        # V1.5 — only if import succeeded
+        # V1.5
         if EVOLUTION_AVAILABLE:
             try:
                 self.evolution = DevelopmentEngine(user_name=user_name)
@@ -50,28 +58,32 @@ class ResponseEngine:
         else:
             self.evolution = None
 
+        # V1.6
+        if INTEGRATIONS_AVAILABLE:
+            try:
+                self.integrations = IntegrationEngine(user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ Integrations init failed: {e}")
+                self.integrations = None
+        else:
+            self.integrations = None
+
     def respond(self, user_message: str, ruby_prompt: str) -> str:
-        # ----------------------------------------
-        # V1.3 — evaluate last prediction against this new message
-        # ----------------------------------------
+        # V1.3 — evaluate last prediction
         try:
             self.learning.pre_turn(user_message)
         except Exception as e:
             print(f"⚠️ learning.pre_turn failed: {e}")
 
-        # ----------------------------------------
-        # 1. Build memory context
-        # ----------------------------------------
+        # 1. Build context
         context = self.memory.build_context(user_message)
 
-        # V0.5 — internal state
         try:
             inner_line = self.dev.describe()
             context = f"{context}\n\nYour body and mood: {inner_line}"
         except Exception as e:
             print(f"⚠️ dev.describe failed: {e}")
 
-        # V0.6 — emotions
         try:
             emotions = self.emotion.get_all()
             emotion_line = self.emotion_expr.describe(emotions)
@@ -79,35 +91,30 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.describe failed: {e}")
 
-        # V0.7 — identity
         try:
             identity_line = self.identity.describe()
             context = f"{context}\n\n{identity_line}"
         except Exception as e:
             print(f"⚠️ identity.describe failed: {e}")
 
-        # V0.8 — social
         try:
             social_line = self.social.describe()
             context = f"{context}\n\nWho he is to you:\n{social_line}"
         except Exception as e:
             print(f"⚠️ social.describe failed: {e}")
 
-        # V1.0 — drives
         try:
             drive_line = self.motivation.describe()
             context = f"{context}\n\nWhat you need right now: {drive_line}"
         except Exception as e:
             print(f"⚠️ motivation.describe failed: {e}")
 
-        # V1.4 — personality
         try:
             personality_line = self.personality.describe()
             context = f"{context}\n\n{personality_line}"
         except Exception as e:
             print(f"⚠️ personality.describe failed: {e}")
 
-        # V1.5 — values (only if available)
         if self.evolution:
             try:
                 values_line = self.evolution.describe()
@@ -116,7 +123,15 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ evolution.describe failed: {e}")
 
-        # V1.3 — what Ruby has learned from experience
+        # V1.6 — semantic memory from Pinecone
+        if self.integrations:
+            try:
+                semantic_line = self.integrations.build_context(user_message)
+                if semantic_line:
+                    context = f"{context}\n\n{semantic_line}"
+            except Exception as e:
+                print(f"⚠️ integrations.build_context failed: {e}")
+
         try:
             learning_line = self.learning.describe()
             if learning_line:
@@ -124,9 +139,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ learning.describe failed: {e}")
 
-        # ----------------------------------------
-        # V1.2 — cognition pipeline
-        # ----------------------------------------
+        # V1.2 — cognition
         trace = None
         try:
             rel = self.memory.relationship.get_state()
@@ -145,9 +158,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ cognition.process failed: {e}")
 
-        # ----------------------------------------
-        # Format the prompt with the user's name
-        # ----------------------------------------
+        # Format prompt
         try:
             base_prompt = ruby_prompt.format(user_name=self.user_name)
         except Exception:
@@ -157,33 +168,23 @@ class ResponseEngine:
         if context:
             description = f"{base_prompt}\n\n{context}"
 
-        # ----------------------------------------
         # 2. Short-term
-        # ----------------------------------------
         self.short_term.add("user", user_message)
 
-        # ----------------------------------------
         # 3. Generate
-        # ----------------------------------------
         reply = self.brain.generate(
             description=description,
             history=self.short_term.get_messages(),
             user_name=self.user_name,
         )
 
-        # ----------------------------------------
         # 4. Store reply
-        # ----------------------------------------
         self.short_term.add("assistant", reply)
 
-        # ----------------------------------------
         # 5. Long-term memory
-        # ----------------------------------------
         self.memory.process(user_message, reply)
 
-        # ----------------------------------------
         # 6. V0.5
-        # ----------------------------------------
         try:
             self.dev.tick()
             rel = self.memory.relationship.get_state()
@@ -195,9 +196,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ dev.on_message failed: {e}")
 
-        # ----------------------------------------
         # 7. V0.6
-        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             inner = self.dev.state.get()
@@ -214,9 +213,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.process failed: {e}")
 
-        # ----------------------------------------
         # 8. V0.7
-        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -234,9 +231,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ identity.process failed: {e}")
 
-        # ----------------------------------------
         # 9. V0.8
-        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -253,9 +248,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ social.process failed: {e}")
 
-        # ----------------------------------------
         # 10. V0.9
-        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -270,9 +263,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ reflection.process failed: {e}")
 
-        # ----------------------------------------
         # 11. V1.0
-        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -289,9 +280,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ motivation.process failed: {e}")
 
-        # ----------------------------------------
-        # 12. V1.4 — personality drift
-        # ----------------------------------------
+        # 12. V1.4
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -305,9 +294,7 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ personality.process failed: {e}")
 
-        # ----------------------------------------
-        # 13. V1.5 — long-term evolution (only if available)
-        # ----------------------------------------
+        # 13. V1.5
         if self.evolution:
             try:
                 rel = self.memory.relationship.get_state()
@@ -322,9 +309,14 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ evolution.process failed: {e}")
 
-        # ----------------------------------------
-        # 14. V1.3 — store prediction + learn
-        # ----------------------------------------
+        # 14. V1.6 — store in Pinecone
+        if self.integrations:
+            try:
+                self.integrations.process(user_message, reply)
+            except Exception as e:
+                print(f"⚠️ integrations.process failed: {e}")
+
+        # 15. V1.3 — learning
         try:
             emo = self.emotion.get_all()
             if trace is not None:
@@ -334,9 +326,6 @@ class ResponseEngine:
 
         return reply
 
-    # ----------------------------------------
-    # Utilities
-    # ----------------------------------------
     def clear_short_term(self):
         self.short_term.clear()
 
@@ -363,15 +352,17 @@ class ResponseEngine:
                 self.evolution.wipe()
             except Exception:
                 pass
+        if self.integrations:
+            try:
+                self.integrations.wipe()
+            except Exception:
+                pass
         try:
             from social.interaction_history import InteractionHistory
             InteractionHistory().wipe()
         except Exception:
             pass
 
-    # ----------------------------------------
-    # Stats — every layer
-    # ----------------------------------------
     def memory_stats(self):
         return self.memory.stats()
 
@@ -408,9 +399,6 @@ class ResponseEngine:
     def cognition_trace(self):
         return self.cognition.last_trace()
 
-    # ----------------------------------------
-    # V1.3 — Learning stats
-    # ----------------------------------------
     def learning_summary(self):
         return self.learning.error_summary()
 
@@ -426,15 +414,9 @@ class ResponseEngine:
     def worst_behaviors(self, limit=5):
         return self.learning.worst_behaviors(limit=limit)
 
-    # ----------------------------------------
-    # V1.4 — Personality stats
-    # ----------------------------------------
     def personality_stats(self):
         return self.personality.traits()
 
-    # ----------------------------------------
-    # V1.5 — Evolution stats (safe)
-    # ----------------------------------------
     def values_stats(self):
         return self.evolution.get_values() if self.evolution else {}
 
@@ -446,3 +428,7 @@ class ResponseEngine:
 
     def evolution_preferences(self):
         return self.evolution.get_preferences() if self.evolution else []
+
+    # V1.6
+    def integration_stats(self):
+        return self.integrations.stats() if self.integrations else {}
