@@ -18,8 +18,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Flet
-        run: pip install flet
+      - name: Install flet-cli (pinned)
+        run: pip install flet==0.26.0
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
       - name: Write secrets into config
         run: |
