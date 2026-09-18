@@ -11,7 +11,7 @@ class LocalBrain:
             print(f"🔄 Loading model from: {model_path}")
             self.model = Llama(
                 model_path=model_path,
-                n_ctx=1024,
+                n_ctx=2048,
                 n_threads=3,
                 verbose=False,
             )
@@ -26,29 +26,41 @@ class LocalBrain:
     def is_loaded(self) -> bool:
         return self.model is not None
 
+    # -------------------------
+    # Cleanup — fixed so it doesn't delete her name
+    # -------------------------
     def _clean(self, reply: str, user_name: str) -> str:
-        """Strip markdown, role prefixes, and trailing name signatures."""
+        """Strip markdown and role prefixes. Preserve legitimate name replies."""
         reply = reply.replace("**", "").replace("*", "").strip()
 
+        # leading role prefixes
         if reply.lower().startswith("ruby:"):
             reply = reply[5:].strip()
         if reply.lower().startswith(f"{user_name.lower()}:"):
             reply = reply[len(user_name) + 1:].strip()
 
-        name_tails = ["ruby", "addie", "aditya", user_name.lower()]
+        # Split into lines, dropping empty ones
         lines = [l for l in reply.split("\n") if l.strip()]
-        if lines:
-            last = lines[-1].rstrip(" .-—:").strip()
-            if last.lower() in name_tails:
-                lines = lines[:-1]
-        reply = " ".join(lines)
 
-        for tail in ["— Ruby", "- Ruby", "– Ruby", "—Ruby", "-Ruby", "Ruby."]:
-            if reply.endswith(tail):
-                reply = reply[:-len(tail)].rstrip(" .-—:")
+        # ONLY strip the last line if there are other lines AND it's just a name
+        if len(lines) > 1:
+            last = lines[-1].rstrip(" .-—:").strip().lower()
+            if last in ["ruby", "addie", "aditya", user_name.lower()]:
+                lines = lines[:-1]
+            reply = " ".join(lines)
+        else:
+            reply = lines[0] if lines else ""
+
+        # Strip dash-signature endings only
+        for sig in ["— Ruby", "- Ruby", "– Ruby", "—Ruby", "-Ruby"]:
+            if reply.endswith(sig):
+                reply = reply[:-len(sig)].rstrip(" .-—:")
 
         return " ".join(reply.split()).strip()
 
+    # -------------------------
+    # Generate
+    # -------------------------
     def generate(self, description: str, history: list, user_name: str = "not_set") -> str:
         if self.model is None:
             return "My brain isn't loaded yet."
