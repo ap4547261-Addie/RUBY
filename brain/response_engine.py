@@ -10,7 +10,16 @@ from motivation.motivation_engine import MotivationEngine
 from cognition.cognition_engine import CognitionEngine
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
-from evolution.development_engine import DevelopmentEngine
+
+# V1.5 — optional. If evolution files are missing or broken,
+# the app still loads and everything else works.
+try:
+    from evolution.development_engine import DevelopmentEngine
+    EVOLUTION_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Evolution layer not available: {e}")
+    EVOLUTION_AVAILABLE = False
+    DevelopmentEngine = None
 
 
 class ResponseEngine:
@@ -30,7 +39,16 @@ class ResponseEngine:
         self.cognition = CognitionEngine(user_name=user_name)          # V1.2
         self.learning = LearningEngine(user_name=user_name)            # V1.3
         self.personality = PersonalityDevelopment(user_name=user_name) # V1.4
-        self.evolution = DevelopmentEngine(user_name=user_name)        # V1.5
+
+        # V1.5 — only if import succeeded
+        if EVOLUTION_AVAILABLE:
+            try:
+                self.evolution = DevelopmentEngine(user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ Evolution init failed: {e}")
+                self.evolution = None
+        else:
+            self.evolution = None
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
         # ----------------------------------------
@@ -89,13 +107,14 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ personality.describe failed: {e}")
 
-        # V1.5 — values
-        try:
-            values_line = self.evolution.describe()
-            if values_line:
-                context = f"{context}\n\n{values_line}"
-        except Exception as e:
-            print(f"⚠️ evolution.describe failed: {e}")
+        # V1.5 — values (only if available)
+        if self.evolution:
+            try:
+                values_line = self.evolution.describe()
+                if values_line:
+                    context = f"{context}\n\n{values_line}"
+            except Exception as e:
+                print(f"⚠️ evolution.describe failed: {e}")
 
         # V1.3 — what Ruby has learned from experience
         try:
@@ -287,20 +306,21 @@ class ResponseEngine:
             print(f"⚠️ personality.process failed: {e}")
 
         # ----------------------------------------
-        # 13. V1.5 — long-term evolution
+        # 13. V1.5 — long-term evolution (only if available)
         # ----------------------------------------
-        try:
-            rel = self.memory.relationship.get_state()
-            emo = self.emotion.get_all()
-            inner = self.dev.state.get()
-            self.evolution.process(
-                internal_state=inner,
-                emotions=emo,
-                relationship=rel,
-                learning=None,
-            )
-        except Exception as e:
-            print(f"⚠️ evolution.process failed: {e}")
+        if self.evolution:
+            try:
+                rel = self.memory.relationship.get_state()
+                emo = self.emotion.get_all()
+                inner = self.dev.state.get()
+                self.evolution.process(
+                    internal_state=inner,
+                    emotions=emo,
+                    relationship=rel,
+                    learning=None,
+                )
+            except Exception as e:
+                print(f"⚠️ evolution.process failed: {e}")
 
         # ----------------------------------------
         # 14. V1.3 — store prediction + learn
@@ -333,10 +353,14 @@ class ResponseEngine:
             ("cognition", self.cognition),
             ("learning", self.learning),
             ("personality", self.personality),
-            ("evolution", self.evolution),
         ]:
             try:
                 obj.wipe()
+            except Exception:
+                pass
+        if self.evolution:
+            try:
+                self.evolution.wipe()
             except Exception:
                 pass
         try:
@@ -409,16 +433,16 @@ class ResponseEngine:
         return self.personality.traits()
 
     # ----------------------------------------
-    # V1.5 — Evolution stats
+    # V1.5 — Evolution stats (safe)
     # ----------------------------------------
     def values_stats(self):
-        return self.evolution.get_values()
+        return self.evolution.get_values() if self.evolution else {}
 
     def value_history(self, limit=None):
-        return self.evolution.get_value_history(limit=limit)
+        return self.evolution.get_value_history(limit=limit) if self.evolution else []
 
     def evolution_personality(self):
-        return self.evolution.get_personality()
+        return self.evolution.get_personality() if self.evolution else {}
 
     def evolution_preferences(self):
-        return self.evolution.get_preferences()
+        return self.evolution.get_preferences() if self.evolution else []
