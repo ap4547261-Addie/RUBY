@@ -1,4 +1,4 @@
-# main.py - Ruby V1.3 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning)
+# main.py - Ruby V1.4 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning + Personality)
 
 import os
 import shutil
@@ -340,7 +340,6 @@ def main(page: ft.Page):
         try:
             learning_lines = []
 
-            # error counts
             err_summary = response_engine.learning_summary()
             if err_summary:
                 for direction, count in err_summary.items():
@@ -350,7 +349,6 @@ def main(page: ft.Page):
             else:
                 learning_lines.append(ft.Text("No prediction errors yet.", size=11, color=ft.Colors.GREY_500))
 
-            # recent prediction errors
             recent_errors = response_engine.recent_prediction_errors(limit=5)
             if recent_errors:
                 learning_lines.append(ft.Divider(height=1))
@@ -362,7 +360,6 @@ def main(page: ft.Page):
                         )
                     )
 
-            # preferences
             prefs = response_engine.preference_stats()
             if prefs:
                 learning_lines.append(ft.Divider(height=1))
@@ -372,7 +369,6 @@ def main(page: ft.Page):
                                 size=11, color=ft.Colors.LIME_200)
                     )
 
-            # best behaviors
             best = response_engine.best_behaviors(limit=3)
             if best:
                 learning_lines.append(ft.Divider(height=1))
@@ -386,6 +382,19 @@ def main(page: ft.Page):
                 learning_lines = [ft.Text("Nothing learned yet.", size=12, color=ft.Colors.GREY_500)]
         except Exception as learn_ex:
             learning_lines = [ft.Text(f"Learning unavailable: {learn_ex}", size=12, color=ft.Colors.RED_300)]
+
+        # --- Personality (V1.4) ---
+        try:
+            traits = response_engine.personality_stats()
+            if traits:
+                personality_lines = [
+                    ft.Text(f"{k}: {v}", size=12, color=ft.Colors.PINK_200)
+                    for k, v in sorted(traits.items(), key=lambda x: -x[1])
+                ]
+            else:
+                personality_lines = [ft.Text("No traits yet.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as pers_ex:
+            personality_lines = [ft.Text(f"Personality unavailable: {pers_ex}", size=12, color=ft.Colors.RED_300)]
 
         # --- Actions ---
         def pick_model(ev):
@@ -449,11 +458,13 @@ def main(page: ft.Page):
             title=ft.Text("⚙️ Settings"),
             content=ft.Column(
                 [
+                    # --- Account ---
                     ft.Text("👤 Account", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     name_field, phone_field, email_field,
                     ft.ElevatedButton("🔐 Sign in with Google", disabled=True, width=340),
                     ft.Divider(),
 
+                    # --- Brain ---
                     ft.Text("🧠 Brain", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     model_name_label,
                     ft.ElevatedButton("Choose Model File", icon=ft.Icons.UPLOAD_FILE,
@@ -461,46 +472,62 @@ def main(page: ft.Page):
                     context_field, threads_field,
                     ft.Divider(),
 
+                    # --- Memory ---
                     ft.Text("💭 Memory", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     mem_episodes, mem_facts, mem_msgs, mem_trust, mem_fam, mem_resp, mem_att,
                     ft.Divider(),
 
+                    # --- Internal State ---
                     ft.Text("🧬 Internal State", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_300),
                     inner_energy, inner_warmth, inner_tension, inner_irrit,
                     ft.Divider(),
 
+                    # --- Emotions ---
                     ft.Text("❤️ Emotions", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PURPLE_200),
                     *emo_lines,
                     ft.Divider(),
 
+                    # --- Identity ---
                     ft.Text("🪞 Identity", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.AMBER_200),
                     *identity_lines,
                     ft.Divider(),
 
+                    # --- Social ---
                     ft.Text("🧑 Social", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_GREEN_200),
                     *social_lines,
                     ft.Divider(),
 
+                    # --- Reflection ---
                     ft.Text("🪷 Reflection", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.TEAL_200),
                     *reflection_lines,
                     ft.Divider(),
 
+                    # --- Motivation ---
                     ft.Text("🎯 Motivation", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
                     *motivation_lines,
                     ft.Divider(),
 
+                    # --- Cognition ---
                     ft.Text("🧠 Cognition", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_200),
                     *cognition_lines,
                     ft.Divider(),
 
+                    # --- Learning ---
                     ft.Text("🎓 Learning", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIME_200),
                     *learning_lines,
                     ft.Divider(),
 
+                    # --- Personality (V1.4) ---
+                    ft.Text("🧬 Personality", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_200),
+                    *personality_lines,
+                    ft.Divider(),
+
+                    # --- Wipe ---
                     ft.ElevatedButton("Wipe All Memory", icon=ft.Icons.DELETE_FOREVER,
                                       on_click=do_wipe_memory, width=340),
                     ft.Divider(),
 
+                    # --- Backup ---
                     ft.Text("💾 Backup", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     backup_label,
                     ft.Row([
@@ -509,6 +536,7 @@ def main(page: ft.Page):
                     ], alignment=ft.MainAxisAlignment.START),
                     ft.Divider(),
 
+                    # --- Integrations ---
                     ft.Text("🔗 Integrations", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     ft.Text("Pinecone: Not connected", size=13, color=ft.Colors.GREY_400),
                     ft.Text("Instagram: Not connected", size=13, color=ft.Colors.GREY_400),
