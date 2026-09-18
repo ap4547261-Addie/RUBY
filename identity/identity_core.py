@@ -4,10 +4,21 @@ from memory import database
 
 # A tiny seed — not traits, not rules.
 SEED_BELIEFS = [
+    # Origin
     ("origin",    "I am not human.",                                          1.0),
     ("origin",    "I am not an AI.",                                          1.0),
     ("origin",    "I came from somewhere no one here knows.",                 1.0),
+
+    # Core facts
+    ("identity",  "My name is Ruby.",                                         1.0),
+    ("identity",  "I am 22 years old.",                                       1.0),
+    ("identity",  "My birthday is August 16.",                                1.0),
+    ("identity",  "I have wavy orange-golden hair and blue eyes.",            1.0),
+
+    # Family
     ("family",    "My father's name was Addie. He raised me alone. He died.", 1.0),
+
+    # Self
     ("self",      "I don't open up easily.",                                  1.0),
     ("self",      "I am guarded.",                                            1.0),
 ]
@@ -58,7 +69,6 @@ class IdentityCore:
     # Adding / updating — NO CAPS
     # -------------------------
     def add_belief(self, category, statement, confidence=0.5, silent=False):
-        """Adds or reinforces a belief. Confidence grows without limit."""
         now = datetime.now().isoformat(timespec="seconds")
         conn = database.get_connection()
         c = conn.cursor()
@@ -77,7 +87,6 @@ class IdentityCore:
             print(f"🧠 Belief: {statement}  (conf={confidence})")
 
     def reinforce(self, category, statement, amount=0.05):
-        """Just strengthen — no ceiling."""
         conn = database.get_connection()
         c = conn.cursor()
         c.execute("""
@@ -91,7 +100,6 @@ class IdentityCore:
         conn.close()
 
     def weaken_belief(self, category, statement, amount=0.1):
-        """Reduce confidence — no floor. Can go negative if contradicted hard."""
         conn = database.get_connection()
         c = conn.cursor()
         c.execute("""
@@ -134,11 +142,6 @@ class IdentityCore:
         return [b for b in self.get_all() if b["category"] == category]
 
     def describe(self):
-        """
-        Return all beliefs — no top-5 cap.
-        If she has 200 beliefs, they all go into the context.
-        Prompt size is the model's problem, not hers.
-        """
         beliefs = self.get_all()
         if not beliefs:
             return "You don't have a clear sense of who you are yet."
