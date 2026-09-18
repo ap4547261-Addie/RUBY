@@ -8,6 +8,7 @@ from social.social_learning import SocialLearning
 from reflection.reflection_engine import ReflectionEngine
 from motivation.motivation_engine import MotivationEngine
 from cognition.cognition_engine import CognitionEngine
+from learning.learning_engine import LearningEngine
 
 
 class ResponseEngine:
@@ -25,9 +26,20 @@ class ResponseEngine:
         self.reflection = ReflectionEngine(user_name=user_name)        # V0.9
         self.motivation = MotivationEngine(user_name=user_name, platform=platform)  # V1.0
         self.cognition = CognitionEngine(user_name=user_name)          # V1.2
+        self.learning = LearningEngine(user_name=user_name)            # V1.3
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
+        # ----------------------------------------
+        # V1.3 — evaluate last prediction against this new message
+        # ----------------------------------------
+        try:
+            self.learning.pre_turn(user_message)
+        except Exception as e:
+            print(f"⚠️ learning.pre_turn failed: {e}")
+
+        # ----------------------------------------
         # 1. Build memory context
+        # ----------------------------------------
         context = self.memory.build_context(user_message)
 
         # V0.5 — internal state
@@ -66,7 +78,18 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ motivation.describe failed: {e}")
 
+        # V1.3 — what Ruby has learned from experience
+        try:
+            learning_line = self.learning.describe()
+            if learning_line:
+                context = f"{context}\n\nWhat you've learned from experience: {learning_line}"
+        except Exception as e:
+            print(f"⚠️ learning.describe failed: {e}")
+
+        # ----------------------------------------
         # V1.2 — cognition pipeline
+        # ----------------------------------------
+        trace = None
         try:
             rel = self.memory.relationship.get_state()
             inner = self.dev.state.get()
@@ -88,23 +111,33 @@ class ResponseEngine:
         if context:
             description = f"{ruby_prompt}\n\n{context}"
 
+        # ----------------------------------------
         # 2. Short-term
+        # ----------------------------------------
         self.short_term.add("user", user_message)
 
+        # ----------------------------------------
         # 3. Generate
+        # ----------------------------------------
         reply = self.brain.generate(
             description=description,
             history=self.short_term.get_messages(),
             user_name=self.user_name,
         )
 
+        # ----------------------------------------
         # 4. Store reply
+        # ----------------------------------------
         self.short_term.add("assistant", reply)
 
+        # ----------------------------------------
         # 5. Long-term memory
+        # ----------------------------------------
         self.memory.process(user_message, reply)
 
+        # ----------------------------------------
         # 6. V0.5
+        # ----------------------------------------
         try:
             self.dev.tick()
             rel = self.memory.relationship.get_state()
@@ -116,7 +149,9 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ dev.on_message failed: {e}")
 
+        # ----------------------------------------
         # 7. V0.6
+        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             inner = self.dev.state.get()
@@ -133,7 +168,9 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.process failed: {e}")
 
+        # ----------------------------------------
         # 8. V0.7
+        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -151,7 +188,9 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ identity.process failed: {e}")
 
+        # ----------------------------------------
         # 9. V0.8
+        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -168,7 +207,9 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ social.process failed: {e}")
 
+        # ----------------------------------------
         # 10. V0.9
+        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -183,7 +224,9 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ reflection.process failed: {e}")
 
+        # ----------------------------------------
         # 11. V1.0
+        # ----------------------------------------
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -199,6 +242,16 @@ class ResponseEngine:
             )
         except Exception as e:
             print(f"⚠️ motivation.process failed: {e}")
+
+        # ----------------------------------------
+        # 12. V1.3 — store prediction + learn
+        # ----------------------------------------
+        try:
+            emo = self.emotion.get_all()
+            if trace is not None:
+                self.learning.post_turn(trace, user_message, reply, emo)
+        except Exception as e:
+            print(f"⚠️ learning.post_turn failed: {e}")
 
         return reply
 
@@ -219,6 +272,7 @@ class ResponseEngine:
             ("reflection", self.reflection),
             ("motivation", self.motivation),
             ("cognition", self.cognition),
+            ("learning", self.learning),
         ]:
             try:
                 obj.wipe()
@@ -230,6 +284,9 @@ class ResponseEngine:
         except Exception:
             pass
 
+    # ----------------------------------------
+    # Stats — every layer
+    # ----------------------------------------
     def memory_stats(self):
         return self.memory.stats()
 
@@ -265,3 +322,21 @@ class ResponseEngine:
 
     def cognition_trace(self):
         return self.cognition.last_trace()
+
+    # ----------------------------------------
+    # V1.3 — Learning stats
+    # ----------------------------------------
+    def learning_summary(self):
+        return self.learning.error_summary()
+
+    def recent_prediction_errors(self, limit=10):
+        return self.learning.recent_errors(limit=limit)
+
+    def preference_stats(self):
+        return self.learning.preferences()
+
+    def best_behaviors(self, limit=5):
+        return self.learning.best_behaviors(limit=limit)
+
+    def worst_behaviors(self, limit=5):
+        return self.learning.worst_behaviors(limit=limit)
