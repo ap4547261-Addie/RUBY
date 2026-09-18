@@ -1,4 +1,4 @@
-# main.py - Ruby V1.4 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning + Personality)
+# main.py - Ruby V1.5 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning + Personality + Evolution)
 
 import os
 import shutil
@@ -396,6 +396,40 @@ def main(page: ft.Page):
         except Exception as pers_ex:
             personality_lines = [ft.Text(f"Personality unavailable: {pers_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Evolution (V1.5) ---
+        try:
+            evolution_lines = []
+
+            # values
+            values = response_engine.values_stats()
+            if values:
+                evolution_lines.append(
+                    ft.Text("— Values —", size=11, color=ft.Colors.CYAN_200)
+                )
+                for k, v in sorted(values.items(), key=lambda x: -x[1]):
+                    evolution_lines.append(
+                        ft.Text(f"{k}: {v}", size=11, color=ft.Colors.CYAN_200)
+                    )
+
+            # value history
+            vhistory = response_engine.value_history(limit=5)
+            if vhistory:
+                evolution_lines.append(ft.Divider(height=1))
+                evolution_lines.append(
+                    ft.Text("— Recent shifts —", size=11, color=ft.Colors.CYAN_100)
+                )
+                for value_name, delta, reason, ts in vhistory:
+                    sign = "+" if delta >= 0 else ""
+                    evolution_lines.append(
+                        ft.Text(f"{value_name}: {sign}{round(delta, 4)} ({reason})",
+                                size=10, color=ft.Colors.CYAN_100)
+                    )
+
+            if not evolution_lines:
+                evolution_lines = [ft.Text("Nothing evolved yet.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as evo_ex:
+            evolution_lines = [ft.Text(f"Evolution unavailable: {evo_ex}", size=12, color=ft.Colors.RED_300)]
+
         # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
@@ -517,9 +551,14 @@ def main(page: ft.Page):
                     *learning_lines,
                     ft.Divider(),
 
-                    # --- Personality (V1.4) ---
-                    ft.Text("🧬 Personality", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_200),
+                    # --- Personality ---
+                    ft.Text("🎭 Personality", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_200),
                     *personality_lines,
+                    ft.Divider(),
+
+                    # --- Evolution (V1.5) ---
+                    ft.Text("🌱 Evolution", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_200),
+                    *evolution_lines,
                     ft.Divider(),
 
                     # --- Wipe ---
