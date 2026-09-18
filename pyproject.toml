@@ -12,10 +12,28 @@ requires-python = ">=3.11"
 dependencies = [
     "flet==0.26.0",
     "llama-cpp-python==0.3.32",
+    "pinecone-client>=5.0.0",
 ]
 
 [tool.setuptools.packages.find]
-include = ["brain*", "memory*", "prompts*"]
+include = [
+    "brain*",
+    "memory*",
+    "prompts*",
+    "ruby_core*",
+    "emotion*",
+    "identity*",
+    "social*",
+    "reflection*",
+    "motivation*",
+    "cognition*",
+    "learning*",
+    "personality*",
+    "evolution*",
+    "integrations*",
+    "settings*",
+    "tools*",
+]
 
 [tool.black]
 line-length = 120
