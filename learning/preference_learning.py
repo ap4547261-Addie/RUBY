@@ -2,10 +2,32 @@ from datetime import datetime
 from memory import database
 
 
+# Words that are verbs, pronouns, or junk — never topics
+STOPWORDS = {
+    # common verbs
+    "have", "make", "become", "became", "going", "come", "came", "want", "wanted",
+    "need", "needed", "know", "knew", "think", "thought", "say", "said", "tell",
+    "told", "give", "gave", "take", "took", "look", "looking", "talk", "talking",
+    "chat", "chatting", "doing", "done", "being", "just", "really", "thing",
+    "things", "about", "because", "there", "their", "they", "them", "yourself",
+    "ourselves", "themselves", "would", "could", "should", "might", "still",
+    "even", "ever", "never", "always", "sometimes", "maybe", "perhaps",
+    "okay", "yeah", "yess", "well", "sure", "much", "many", "very",
+    "each", "eachother", "every", "everyone", "someone", "somebody",
+    "people", "person", "gonna", "wanna", "gotta", "lol",
+
+    # generic relationship words (not topics)
+    "friend", "friends", "friendship", "relationship",
+}
+
+# Common typos / junk that come from typing errors
+TYPO_MARKERS = {"eacheother", "comfrtable", "becom", "dont", "cant", "wont"}
+
+
 class PreferenceLearning:
     """
     Learns what Ruby actually likes/dislikes from experience.
-    No caps. Preferences accumulate forever.
+    Filters out verbs, typos, and junk words so only real topics are tracked.
     """
 
     def __init__(self, user_name="not_set"):
@@ -29,24 +51,44 @@ class PreferenceLearning:
         conn.commit()
         conn.close()
 
-    def learn_from(self, user_message: str, emotions: dict):
-        """
-        When a message triggers strong emotion, associate it with the topics in that message.
-        """
-        # extract topics (simple — meaningful words)
-        words = [w.lower().strip(".,!?") for w in user_message.split()]
-        topics = [w for w in words if len(w) > 4]
+    def _extract_topics(self, user_message: str) -> list:
+        """Extract meaningful topics — filter hard."""
+        words = [w.lower().strip(".,!?;:") for w in user_message.split()]
+        topics = []
+        for w in words:
+            # skip short words
+            if len(w) < 5:
+                continue
+            # skip stopwords
+            if w in STOPWORDS:
+                continue
+            # skip typos
+            if w in TYPO_MARKERS:
+                continue
+            # skip words with no vowels (typos)
+            if not any(v in w for v in "aeiou"):
+                continue
+            # skip words with 3+ repeated letters (like "sooo")
+            repeats = max((w.count(c) for c in set(w)), default=0)
+            if repeats >= 3 and len(w) < 8:
+                continue
+            topics.append(w)
 
+        # dedupe
+        return list(set(topics))
+
+    def learn_from(self, user_message: str, emotions: dict):
+        topics = self._extract_topics(user_message)
         if not topics:
             return
 
-        # overall emotional valence
-        positive = emotions.get("joy", 0) + emotions.get("warmth", 0) + emotions.get("love", 0) + emotions.get("curiosity", 0)
-        negative = emotions.get("anger", 0) + emotions.get("irritation", 0) + emotions.get("sadness", 0) + emotions.get("fear", 0) + emotions.get("jealousy", 0)
+        positive = (emotions.get("joy", 0) + emotions.get("warmth", 0)
+                    + emotions.get("love", 0) + emotions.get("curiosity", 0))
+        negative = (emotions.get("anger", 0) + emotions.get("irritation", 0)
+                    + emotions.get("sadness", 0) + emotions.get("fear", 0)
+                    + emotions.get("jealousy", 0))
 
         score = positive - negative
-
-        # only update if there was real feeling
         if abs(score) < 0.5:
             return
 
