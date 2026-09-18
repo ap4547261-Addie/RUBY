@@ -19,7 +19,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install flet==0.26.0
+          pip install flet-cli==0.26.0
+          pip install -r requirements.txt
 
       - name: Write secrets into config
         run: |
@@ -30,7 +33,7 @@ jobs:
           EOF
 
       - name: Build APK
-        run: python -m flet build apk
+        run: flet build apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
