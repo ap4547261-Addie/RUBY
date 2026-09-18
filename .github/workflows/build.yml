@@ -33,10 +33,7 @@ jobs:
           EOF
 
       - name: Build Ruby APK
-        run: |
-          flet build apk \
-            --verbose \
-            --extra-py-index-url https://pypi.flet.dev
+        run: flet build apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
