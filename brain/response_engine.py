@@ -10,6 +10,7 @@ from motivation.motivation_engine import MotivationEngine
 from cognition.cognition_engine import CognitionEngine
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
+from evolution.development_engine import DevelopmentEngine
 
 
 class ResponseEngine:
@@ -29,6 +30,7 @@ class ResponseEngine:
         self.cognition = CognitionEngine(user_name=user_name)          # V1.2
         self.learning = LearningEngine(user_name=user_name)            # V1.3
         self.personality = PersonalityDevelopment(user_name=user_name) # V1.4
+        self.evolution = DevelopmentEngine(user_name=user_name)        # V1.5
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
         # ----------------------------------------
@@ -86,6 +88,14 @@ class ResponseEngine:
             context = f"{context}\n\n{personality_line}"
         except Exception as e:
             print(f"⚠️ personality.describe failed: {e}")
+
+        # V1.5 — values
+        try:
+            values_line = self.evolution.describe()
+            if values_line:
+                context = f"{context}\n\n{values_line}"
+        except Exception as e:
+            print(f"⚠️ evolution.describe failed: {e}")
 
         # V1.3 — what Ruby has learned from experience
         try:
@@ -277,7 +287,23 @@ class ResponseEngine:
             print(f"⚠️ personality.process failed: {e}")
 
         # ----------------------------------------
-        # 13. V1.3 — store prediction + learn
+        # 13. V1.5 — long-term evolution
+        # ----------------------------------------
+        try:
+            rel = self.memory.relationship.get_state()
+            emo = self.emotion.get_all()
+            inner = self.dev.state.get()
+            self.evolution.process(
+                internal_state=inner,
+                emotions=emo,
+                relationship=rel,
+                learning=None,
+            )
+        except Exception as e:
+            print(f"⚠️ evolution.process failed: {e}")
+
+        # ----------------------------------------
+        # 14. V1.3 — store prediction + learn
         # ----------------------------------------
         try:
             emo = self.emotion.get_all()
@@ -307,6 +333,7 @@ class ResponseEngine:
             ("cognition", self.cognition),
             ("learning", self.learning),
             ("personality", self.personality),
+            ("evolution", self.evolution),
         ]:
             try:
                 obj.wipe()
@@ -380,3 +407,18 @@ class ResponseEngine:
     # ----------------------------------------
     def personality_stats(self):
         return self.personality.traits()
+
+    # ----------------------------------------
+    # V1.5 — Evolution stats
+    # ----------------------------------------
+    def values_stats(self):
+        return self.evolution.get_values()
+
+    def value_history(self, limit=None):
+        return self.evolution.get_value_history(limit=limit)
+
+    def evolution_personality(self):
+        return self.evolution.get_personality()
+
+    def evolution_preferences(self):
+        return self.evolution.get_preferences()
