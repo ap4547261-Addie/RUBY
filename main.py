@@ -1,4 +1,4 @@
-# main.py - Ruby V1.5 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning + Personality + Evolution)
+# main.py - Ruby V1.6 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning + Personality + Evolution + Integrations)
 
 import os
 import shutil
@@ -140,7 +140,7 @@ def main(page: ft.Page):
     # Settings Dialog
     # ----------------------------------------
     def open_settings(e):
-        # --- Account ---
+        # --- Account fields ---
         name_field = ft.TextField(
             label="Name",
             value=settings.get("user_name", ""),
@@ -159,7 +159,7 @@ def main(page: ft.Page):
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
-        # --- Brain ---
+        # --- Brain fields ---
         model_name_label = ft.Text(
             settings.get("model_name") or "No model selected",
             size=13, color=ft.Colors.GREY_400,
@@ -400,7 +400,6 @@ def main(page: ft.Page):
         try:
             evolution_lines = []
 
-            # values
             values = response_engine.values_stats()
             if values:
                 evolution_lines.append(
@@ -411,7 +410,6 @@ def main(page: ft.Page):
                         ft.Text(f"{k}: {v}", size=11, color=ft.Colors.CYAN_200)
                     )
 
-            # value history
             vhistory = response_engine.value_history(limit=5)
             if vhistory:
                 evolution_lines.append(ft.Divider(height=1))
@@ -429,6 +427,65 @@ def main(page: ft.Page):
                 evolution_lines = [ft.Text("Nothing evolved yet.", size=12, color=ft.Colors.GREY_500)]
         except Exception as evo_ex:
             evolution_lines = [ft.Text(f"Evolution unavailable: {evo_ex}", size=12, color=ft.Colors.RED_300)]
+
+        # --- Integrations (V1.6) ---
+        try:
+            integration_lines = []
+            int_stats = response_engine.integration_stats()
+
+            # Pinecone status
+            pinecone = int_stats.get("pinecone", {})
+            pc_status = pinecone.get("status", "disabled")
+            if pc_status == "connected":
+                pc_text = f"✅ Connected — {pinecone.get('total_vectors', 0)} vectors"
+                pc_color = ft.Colors.GREEN_200
+            elif pc_status == "disabled":
+                pc_text = "⏸ Not configured (SQLite only)"
+                pc_color = ft.Colors.GREY_400
+            elif pc_status == "error":
+                pc_text = "⚠️ Error connecting"
+                pc_color = ft.Colors.RED_300
+            else:
+                pc_text = f"Status: {pc_status}"
+                pc_color = ft.Colors.GREY_400
+
+            integration_lines.append(
+                ft.Text(f"Pinecone: {pc_text}", size=12, color=pc_color)
+            )
+
+            # Cloud sync status
+            cloud = int_stats.get("cloud", {})
+            backup_count = cloud.get("backup_count", 0)
+            integration_lines.append(
+                ft.Text(f"Local backups: {backup_count}", size=12, color=ft.Colors.CYAN_200)
+            )
+
+            # Backup button
+            def do_backup(ev):
+                try:
+                    path = response_engine.integrations.backup()
+                    if path:
+                        show_snack(f"💾 Backed up: {path}")
+                    else:
+                        show_snack("⚠️ Backup failed")
+                except Exception as be:
+                    show_snack(f"❌ {be}")
+                page.update()
+
+            integration_lines.append(
+                ft.ElevatedButton(
+                    "Backup Database",
+                    icon=ft.Icons.SAVE,
+                    on_click=do_backup,
+                    width=340,
+                )
+            )
+
+            integration_lines.append(
+                ft.Text("Instagram: Not connected", size=12, color=ft.Colors.GREY_400)
+            )
+        except Exception as int_ex:
+            integration_lines = [ft.Text(f"Integrations unavailable: {int_ex}", size=12, color=ft.Colors.RED_300)]
 
         # --- Actions ---
         def pick_model(ev):
@@ -492,13 +549,11 @@ def main(page: ft.Page):
             title=ft.Text("⚙️ Settings"),
             content=ft.Column(
                 [
-                    # --- Account ---
                     ft.Text("👤 Account", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     name_field, phone_field, email_field,
                     ft.ElevatedButton("🔐 Sign in with Google", disabled=True, width=340),
                     ft.Divider(),
 
-                    # --- Brain ---
                     ft.Text("🧠 Brain", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     model_name_label,
                     ft.ElevatedButton("Choose Model File", icon=ft.Icons.UPLOAD_FILE,
@@ -506,79 +561,64 @@ def main(page: ft.Page):
                     context_field, threads_field,
                     ft.Divider(),
 
-                    # --- Memory ---
                     ft.Text("💭 Memory", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     mem_episodes, mem_facts, mem_msgs, mem_trust, mem_fam, mem_resp, mem_att,
                     ft.Divider(),
 
-                    # --- Internal State ---
                     ft.Text("🧬 Internal State", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_300),
                     inner_energy, inner_warmth, inner_tension, inner_irrit,
                     ft.Divider(),
 
-                    # --- Emotions ---
                     ft.Text("❤️ Emotions", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PURPLE_200),
                     *emo_lines,
                     ft.Divider(),
 
-                    # --- Identity ---
                     ft.Text("🪞 Identity", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.AMBER_200),
                     *identity_lines,
                     ft.Divider(),
 
-                    # --- Social ---
                     ft.Text("🧑 Social", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_GREEN_200),
                     *social_lines,
                     ft.Divider(),
 
-                    # --- Reflection ---
                     ft.Text("🪷 Reflection", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.TEAL_200),
                     *reflection_lines,
                     ft.Divider(),
 
-                    # --- Motivation ---
                     ft.Text("🎯 Motivation", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
                     *motivation_lines,
                     ft.Divider(),
 
-                    # --- Cognition ---
                     ft.Text("🧠 Cognition", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_200),
                     *cognition_lines,
                     ft.Divider(),
 
-                    # --- Learning ---
                     ft.Text("🎓 Learning", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIME_200),
                     *learning_lines,
                     ft.Divider(),
 
-                    # --- Personality ---
                     ft.Text("🎭 Personality", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_200),
                     *personality_lines,
                     ft.Divider(),
 
-                    # --- Evolution (V1.5) ---
                     ft.Text("🌱 Evolution", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_200),
                     *evolution_lines,
                     ft.Divider(),
 
-                    # --- Wipe ---
+                    ft.Text("🔗 Integrations", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
+                    *integration_lines,
+                    ft.Divider(),
+
                     ft.ElevatedButton("Wipe All Memory", icon=ft.Icons.DELETE_FOREVER,
                                       on_click=do_wipe_memory, width=340),
                     ft.Divider(),
 
-                    # --- Backup ---
-                    ft.Text("💾 Backup", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
+                    ft.Text("💾 Settings Backup", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     backup_label,
                     ft.Row([
                         ft.ElevatedButton("Export", icon=ft.Icons.DOWNLOAD, on_click=do_export),
                         ft.ElevatedButton("Import", icon=ft.Icons.UPLOAD, on_click=do_import),
                     ], alignment=ft.MainAxisAlignment.START),
-                    ft.Divider(),
-
-                    # --- Integrations ---
-                    ft.Text("🔗 Integrations", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
-                    ft.Text("Pinecone: Not connected", size=13, color=ft.Colors.GREY_400),
-                    ft.Text("Instagram: Not connected", size=13, color=ft.Colors.GREY_400),
                 ],
                 tight=True, spacing=10, width=360, scroll=ft.ScrollMode.AUTO,
             ),
