@@ -116,9 +116,17 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ cognition.process failed: {e}")
 
-        description = ruby_prompt
+        # ----------------------------------------
+        # Format the prompt with the user's name
+        # ----------------------------------------
+        try:
+            base_prompt = ruby_prompt.format(user_name=self.user_name)
+        except Exception:
+            base_prompt = ruby_prompt
+
+        description = base_prompt
         if context:
-            description = f"{ruby_prompt}\n\n{context}"
+            description = f"{base_prompt}\n\n{context}"
 
         # ----------------------------------------
         # 2. Short-term
