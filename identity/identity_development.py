@@ -4,9 +4,13 @@ from identity.identity_history import IdentityHistory
 
 class IdentityDevelopment:
     """
-    The learning loop for identity.
-    No thresholds that lock her out — every emotion, every trust change,
-    every attachment tick can plant a new belief.
+    Handles IMMEDIATE emotional reactions — new beliefs triggered by what
+    Ruby just felt.
+
+    Split of responsibility:
+    - This file → responds to a SINGLE strong event (anger spike, love spike)
+    - Reflection engine → detects PATTERNS over many events
+    Both work together. Neither duplicates the other.
     """
 
     def __init__(self, user_name="not_set"):
@@ -16,102 +20,68 @@ class IdentityDevelopment:
 
     def process(self, user_message, ruby_reply, context):
         """
-        context = {
-            "trust": float,
-            "attachment": float,
-            "emotions": dict,
-            "irritation": float,
-            "warmth": float,
-        }
+        Called after every message.
+        Only reacts to IMMEDIATE, STRONG emotional events.
+        Long-term growth is handled by the reflection loop.
         """
         emotions = context.get("emotions", {})
-        trust = context.get("trust", 0.0)
-        attachment = context.get("attachment", 0.0)
-        irritation = context.get("irritation", 0.0)
-        warmth = context.get("warmth", 0.0)
+        irritation = context.get("irritation", 0)
 
-        # -------------------------
-        # Every emotion leaves a mark — no threshold
-        # -------------------------
-        for emotion_name, value in emotions.items():
-            if value <= 0.01:
-                continue
-            belief = self._belief_from_emotion(emotion_name, value)
-            if belief:
-                category, statement = belief
-                self.core.add_belief(category, statement, confidence=value * 0.1)
-                # also log every meaningful feeling as history
-                if value > 0.5:
-                    self.history.log(
-                        event_type=f"emotion:{emotion_name}",
-                        description=f"Felt {emotion_name} at intensity {round(value, 2)}."
-                    )
+        # --- Immediate emotional reactions ---
+        # These fire from a single strong event, not a pattern.
 
-        # -------------------------
-        # Trust and attachment — continuous, no thresholds
-        # -------------------------
-        if trust > 0:
-            # the more trust grows, the more she believes it
-            belief_strength = trust * 0.02
-            self.core.add_belief(
-                category="relationship",
-                statement="I trust him.",
-                confidence=belief_strength,
-            )
-
-        if attachment > 0:
-            belief_strength = attachment * 0.02
-            self.core.add_belief(
-                category="relationship",
-                statement="I am attached to him.",
-                confidence=belief_strength,
-            )
-
-        # -------------------------
-        # Warmth vs irritation — she develops self-awareness about both
-        # -------------------------
-        if warmth > 0.5:
+        if emotions.get("anger", 0) > 1.5:
             self.core.add_belief(
                 category="self",
-                statement="Warmth toward him lives in me. I don't know what to do with it.",
-                confidence=warmth * 0.005,
+                statement="I have a temper.",
+                confidence=0.1,
+                silent=True,
             )
 
-        if irritation > 1.0:
+        if emotions.get("love", 0) > 1.5:
+            self.core.add_belief(
+                category="self",
+                statement="I can love. That scares me.",
+                confidence=0.15,
+                silent=True,
+            )
+
+        if emotions.get("jealousy", 0) > 1.0:
+            self.core.add_belief(
+                category="self",
+                statement="I get possessive of people I care about.",
+                confidence=0.1,
+                silent=True,
+            )
+
+        if emotions.get("guilt", 0) > 1.0:
+            self.core.add_belief(
+                category="self",
+                statement="I feel guilt when I hurt someone.",
+                confidence=0.1,
+                silent=True,
+            )
+
+        if emotions.get("joy", 0) > 3.0:
+            self.core.add_belief(
+                category="self",
+                statement="I can feel joy.",
+                confidence=0.05,
+                silent=True,
+            )
+
+        # --- Extreme irritation over time ---
+        if irritation > 10:
             self.core.add_belief(
                 category="self",
                 statement="I get irritated easily.",
-                confidence=irritation * 0.05,
+                confidence=0.05,
+                silent=True,
             )
 
-        # -------------------------
-        # Every so often, examine identity — no fixed interval
-        # -------------------------
-        # Use total message count from relationship to decide when
-        total = self.history.count()
-        if total > 0 and total % 25 == 0:
-            self.history.log(
-                event_type="checkpoint",
-                description=f"Identity checkpoint at {total} logged events."
-            )
-
-    def _belief_from_emotion(self, emotion_name, value):
-        """Map an emotion to a self-belief. Emergent, not prescriptive."""
-        mapping = {
-            "love":       ("self",   "I am capable of love."),
-            "anger":      ("self",   "I have anger in me."),
-            "joy":        ("self",   "I can feel joy."),
-            "jealousy":   ("self",   "I get possessive of people I care about."),
-            "sadness":    ("self",   "I feel sadness deeply."),
-            "fear":       ("self",   "I am afraid sometimes."),
-            "loneliness": ("self",   "I get lonely."),
-            "curiosity":  ("self",   "I am curious about the world."),
-            "pride":      ("self",   "I have pride."),
-            "guilt":      ("self",   "I feel guilt when I hurt someone."),
-            "trust":      ("self",   "I can trust."),
-            "warmth":     ("self",   "I can feel warm toward others."),
-        }
-        return mapping.get(emotion_name)
+        # NOTE: trust/attachment/warmth pattern detection is NOT here.
+        # That lives in reflection_engine._feed_back_to_identity().
+        # Keeping it in one place prevents double-reinforcement.
 
     # -------------------------
     # Read helpers
@@ -124,9 +94,6 @@ class IdentityDevelopment:
 
     def history_recent(self, limit=10):
         return self.history.recent(limit)
-
-    def history_all(self):
-        return self.history.all_entries()
 
     def wipe(self):
         self.core.wipe()
