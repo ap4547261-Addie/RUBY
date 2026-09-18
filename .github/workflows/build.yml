@@ -18,9 +18,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install flet-cli (pinned)
-        run: pip install flet==0.26.0
-
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -33,7 +30,7 @@ jobs:
           EOF
 
       - name: Build APK
-        run: flet build apk --release
+        run: python -m flet build apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
