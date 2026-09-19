@@ -1,15 +1,17 @@
 import os
+import json
+import hashlib
 from datetime import datetime
 
+import requests
 
-# Try environment first (for local testing), then bundled config
+
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "ruby-memory")
 
 if not PINECONE_API_KEY:
     try:
-        # This file is created by GitHub Actions at build time
         from config_secrets import (
             PINECONE_API_KEY,
             PINECONE_INDEX_HOST,
@@ -17,79 +19,73 @@ if not PINECONE_API_KEY:
         )
         print("🔑 Loaded Pinecone config from bundled secrets.")
     except ImportError:
-        # Not set anywhere — Pinecone stays disabled
         pass
 
 EMBEDDING_DIMENSION = 384
+API_VERSION = "2025-01"
 
 
 class PineconeMemory:
     """
-    Ruby's semantic memory — stored in Pinecone as vector embeddings.
-
-    Every message + reply is embedded and stored. When Ruby needs context,
-    she searches by MEANING, not keywords.
-
-    No caps. Every memory is stored forever.
-    Falls back to SQLite-only if Pinecone is unavailable.
+    Pure REST implementation. No pinecone-client needed.
+    Works on any Python version. Uses `requests` which is already available.
+    Silently disables itself if no API key or host.
     """
 
     def __init__(self, user_name="not_set"):
         self.user_name = user_name
         self.enabled = False
-        self.index = None
-        self.pc = None
+        self.host = None
 
-        if PINECONE_API_KEY:
-            self._init_pinecone()
-
-    def _init_pinecone(self):
-        try:
-            from pinecone import Pinecone
-
-            self.pc = Pinecone(api_key=PINECONE_API_KEY)
-
-            if PINECONE_INDEX_HOST:
-                self.index = self.pc.Index(host=PINECONE_INDEX_HOST)
-            else:
-                self.index = self.pc.Index(PINECONE_INDEX_NAME)
-
+        if PINECONE_API_KEY and PINECONE_INDEX_HOST:
+            self.api_key = PINECONE_API_KEY
+            self.host = PINECONE_INDEX_HOST.rstrip("/")
+            if not self.host.startswith("http"):
+                self.host = "https://" + self.host
             self.enabled = True
-            print(f"🔗 Pinecone connected: {PINECONE_INDEX_NAME}")
+            print(f"🔗 Pinecone REST client ready: {PINECONE_INDEX_NAME}")
+        else:
+            print("ℹ️ Pinecone not configured. Using SQLite-only memory.")
 
-        except Exception as e:
-            print(f"⚠️ Pinecone init failed: {e}")
-            print("   Falling back to SQLite-only memory.")
-            self.enabled = False
+    def _headers(self):
+        return {
+            "Api-Key": self.api_key,
+            "Content-Type": "application/json",
+            "X-Pinecone-API-Version": API_VERSION,
+        }
 
     def _embed(self, text):
-        if not self.pc:
-            return None
+        """Use Pinecone's hosted embedding inference API."""
         try:
-            result = self.pc.inference.embed(
-                model="multilingual-e5-large",
-                inputs=[text],
-                parameters={"input_type": "passage", "truncate": "END"},
-            )
-            return result.data[0].values
+            url = "https://api.pinecone.io/embed"
+            body = {
+                "model": "multilingual-e5-large",
+                "inputs": [{"text": text}],
+                "parameters": {"input_type": "passage", "truncate": "END"},
+            }
+            r = requests.post(url, headers=self._headers(), json=body, timeout=20)
+            if r.status_code != 200:
+                print(f"⚠️ Embed HTTP {r.status_code}: {r.text[:200]}")
+                return None
+            data = r.json()
+            return data["data"][0]["values"]
         except Exception as e:
-            print(f"⚠️ Embedding failed: {e}")
+            print(f"⚠️ Embed failed: {e}")
             return None
 
     def store(self, user_message, ruby_reply, category="conversation", importance=3):
         if not self.enabled:
             return
-
         combined = f"User: {user_message}\nRuby: {ruby_reply}"
         vector = self._embed(combined)
         if not vector:
             return
 
         memory_id = f"{self.user_name}-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-
         try:
-            self.index.upsert(
-                vectors=[{
+            url = f"{self.host}/vectors/upsert"
+            body = {
+                "vectors": [{
                     "id": memory_id,
                     "values": vector,
                     "metadata": {
@@ -100,31 +96,39 @@ class PineconeMemory:
                         "importance": importance,
                         "timestamp": datetime.now().isoformat(timespec="seconds"),
                     },
-                }],
-            )
+                }]
+            }
+            r = requests.post(url, headers=self._headers(), json=body, timeout=20)
+            if r.status_code not in (200, 201):
+                print(f"⚠️ Upsert HTTP {r.status_code}: {r.text[:200]}")
         except Exception as e:
             print(f"⚠️ Pinecone store failed: {e}")
 
     def search(self, query, limit=5):
         if not self.enabled:
             return []
-
         vector = self._embed(query)
         if not vector:
             return []
 
         try:
-            result = self.index.query(
-                vector=vector,
-                top_k=limit,
-                include_metadata=True,
-                filter={"user_name": self.user_name},
-            )
+            url = f"{self.host}/query"
+            body = {
+                "vector": vector,
+                "topK": limit,
+                "includeMetadata": True,
+                "filter": {"user_name": {"$eq": self.user_name}},
+            }
+            r = requests.post(url, headers=self._headers(), json=body, timeout=20)
+            if r.status_code != 200:
+                print(f"⚠️ Query HTTP {r.status_code}: {r.text[:200]}")
+                return []
+            data = r.json()
             memories = []
-            for match in result.get("matches", []):
-                meta = match.get("metadata", {})
+            for m in data.get("matches", []):
+                meta = m.get("metadata", {})
                 memories.append({
-                    "score": round(match.get("score", 0), 3),
+                    "score": round(m.get("score", 0), 3),
                     "user_message": meta.get("user_message", ""),
                     "ruby_reply": meta.get("ruby_reply", ""),
                     "timestamp": meta.get("timestamp", ""),
@@ -139,17 +143,13 @@ class PineconeMemory:
         memories = self.search(user_message, limit=limit)
         if not memories:
             return ""
-
         lines = []
         for m in memories:
             if m["score"] < 0.5:
                 continue
             lines.append(f"- he said: {m['user_message']}")
             lines.append(f"  you replied: {m['ruby_reply']}")
-
-        if not lines:
-            return ""
-        return "Semantically related memories:\n" + "\n".join(lines)
+        return ("Semantically related memories:\n" + "\n".join(lines)) if lines else ""
 
     def is_enabled(self):
         return self.enabled
@@ -158,19 +158,25 @@ class PineconeMemory:
         if not self.enabled:
             return {"status": "disabled"}
         try:
-            info = self.index.describe_index_stats()
+            url = f"{self.host}/describe_index_stats"
+            r = requests.post(url, headers=self._headers(), json={}, timeout=20)
+            if r.status_code != 200:
+                return {"status": "error", "code": r.status_code}
+            data = r.json()
             return {
                 "status": "connected",
-                "total_vectors": info.get("total_vector_count", 0),
+                "total_vectors": data.get("totalVectorCount", 0),
             }
-        except Exception:
-            return {"status": "error"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)[:100]}
 
     def wipe(self):
         if not self.enabled:
             return
         try:
-            self.index.delete(filter={"user_name": self.user_name})
+            url = f"{self.host}/vectors/delete"
+            body = {"filter": {"user_name": {"$eq": self.user_name}}}
+            requests.post(url, headers=self._headers(), json=body, timeout=20)
             print(f"🗑️ Pinecone wiped for {self.user_name}")
         except Exception as e:
             print(f"⚠️ Pinecone wipe failed: {e}")
