@@ -1,7 +1,3 @@
-# ============================================================
-# RUBY — PINECONE SEMANTIC MEMORY
-# ============================================================
-
 import os
 import sys
 from datetime import datetime
@@ -10,147 +6,48 @@ import requests
 
 
 # ============================================================
-# PROJECT ROOT
+# BUILD-TIME PINECONE CONFIG
+# GitHub Actions replaces these values during APK build.
 # ============================================================
 
-_PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..")
+# === BUILD_TIME_PINECONE_CONFIG ===
+PINECONE_API_KEY = ""
+PINECONE_INDEX_HOST = ""
+PINECONE_INDEX_NAME = "ruby"
+# === END_BUILD_TIME_PINECONE_CONFIG ===
+
+
+# ============================================================
+# RUNTIME FALLBACK
+# ============================================================
+
+# Environment variables can still override the build values.
+PINECONE_API_KEY = os.getenv(
+    "PINECONE_API_KEY",
+    PINECONE_API_KEY,
 )
 
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
+PINECONE_INDEX_HOST = os.getenv(
+    "PINECONE_INDEX_HOST",
+    PINECONE_INDEX_HOST,
+)
+
+PINECONE_INDEX_NAME = os.getenv(
+    "PINECONE_INDEX_NAME",
+    PINECONE_INDEX_NAME or "ruby",
+)
 
 
 # ============================================================
-# PINECONE CONFIG
+# CONSTANTS
 # ============================================================
-
-PINECONE_API_KEY = None
-PINECONE_INDEX_HOST = None
-PINECONE_INDEX_NAME = "ruby"
-
-_config_error = None
-
-
-# ------------------------------------------------------------
-# First: load config bundled into the APK
-# ------------------------------------------------------------
-
-try:
-    from integrations.config_secrets import (
-        PINECONE_API_KEY as _BUNDLED_API_KEY,
-        PINECONE_INDEX_HOST as _BUNDLED_INDEX_HOST,
-        PINECONE_INDEX_NAME as _BUNDLED_INDEX_NAME,
-    )
-
-    PINECONE_API_KEY = _BUNDLED_API_KEY
-    PINECONE_INDEX_HOST = _BUNDLED_INDEX_HOST
-    PINECONE_INDEX_NAME = _BUNDLED_INDEX_NAME or "ruby"
-
-    print("✅ Bundled Pinecone config loaded")
-
-except Exception as e:
-    _config_error = repr(e)
-
-    print(
-        f"⚠️ Bundled Pinecone config failed: {_config_error}"
-    )
-
-    PINECONE_API_KEY = None
-    PINECONE_INDEX_HOST = None
-    PINECONE_INDEX_NAME = "ruby"
-
-
-# ------------------------------------------------------------
-# Second: environment variables as fallback
-# ------------------------------------------------------------
-
-if not PINECONE_API_KEY:
-    PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-
-if not PINECONE_INDEX_HOST:
-    PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST")
-
-if not PINECONE_INDEX_NAME:
-    PINECONE_INDEX_NAME = os.getenv(
-        "PINECONE_INDEX_NAME",
-        "ruby",
-    )
-
-
-# ============================================================
-# DIAGNOSTIC FILE
-# ============================================================
-
-try:
-    _storage_path = os.getenv(
-        "FLET_APP_STORAGE_DATA",
-        ".",
-    )
-
-    _log_path = os.path.join(
-        _storage_path,
-        "pinecone_debug.txt",
-    )
-
-    with open(
-        _log_path,
-        "w",
-        encoding="utf-8",
-    ) as _f:
-
-        _f.write(
-            f"PROJECT_ROOT: {_PROJECT_ROOT}\n"
-        )
-
-        _f.write(
-            "CONFIG_FILE: "
-            f"{os.path.exists(os.path.join(_PROJECT_ROOT, 'integrations', 'config_secrets.py'))}\n"
-        )
-
-        _f.write(
-            "API_KEY: "
-            + (
-                f"SET len={len(PINECONE_API_KEY)}"
-                if PINECONE_API_KEY
-                else "NOT SET"
-            )
-            + "\n"
-        )
-
-        _f.write(
-            "HOST: "
-            + (
-                "SET"
-                if PINECONE_INDEX_HOST
-                else "NOT SET"
-            )
-            + "\n"
-        )
-
-        _f.write(
-            f"NAME: {PINECONE_INDEX_NAME}\n"
-        )
-
-        _f.write(
-            f"CONFIG_ERROR: {_config_error}\n"
-        )
-
-except Exception as e:
-    print(
-        f"⚠️ Could not write Pinecone diagnostic: {e}"
-    )
-
-
-# ============================================================
-# PINECONE SETTINGS
-# ============================================================
-
-# Your Pinecone index uses multilingual-e5-large.
-# The index shown in Pinecone is dimension 1024.
-EMBEDDING_DIMENSION = 1024
 
 API_VERSION = "2025-01"
+
+# Your Pinecone index dimension.
+# This value is informational here; Pinecone validates the
+# actual vector dimension on upsert.
+EMBEDDING_DIMENSION = 1025
 
 
 # ============================================================
@@ -158,57 +55,56 @@ API_VERSION = "2025-01"
 # ============================================================
 
 class PineconeMemory:
-
     def __init__(self, user_name="not_set"):
-
         self.user_name = user_name
+
         self.enabled = False
+        self.connected = False
         self.host = None
         self.api_key = None
+        self.index_name = PINECONE_INDEX_NAME
 
         # ----------------------------------------------------
         # Validate configuration
         # ----------------------------------------------------
 
-        if PINECONE_API_KEY and PINECONE_INDEX_HOST:
+        if not PINECONE_API_KEY:
+            print("❌ Pinecone API key is missing.")
+            return
 
-            self.api_key = PINECONE_API_KEY
+        if not PINECONE_INDEX_HOST:
+            print("❌ Pinecone index host is missing.")
+            return
 
-            self.host = PINECONE_INDEX_HOST.rstrip("/")
+        # ----------------------------------------------------
+        # Prepare configuration
+        # ----------------------------------------------------
 
-            if not self.host.startswith("http"):
-                self.host = "https://" + self.host
+        self.api_key = PINECONE_API_KEY.strip()
+        self.host = PINECONE_INDEX_HOST.strip().rstrip("/")
 
-            self.enabled = True
+        if not self.host.startswith("http://") and not self.host.startswith("https://"):
+            self.host = "https://" + self.host
 
-            print(
-                "🔗 Pinecone REST client ready: "
-                f"{PINECONE_INDEX_NAME}"
-            )
+        self.index_name = (PINECONE_INDEX_NAME or "ruby").strip()
 
-            print(
-                f"🌐 Pinecone host: {self.host}"
-            )
+        # Configuration exists.
+        self.enabled = True
 
-        else:
+        print("==========================================")
+        print("🔗 PINECONE CONFIGURATION")
+        print("==========================================")
+        print(f"API KEY: SET ({len(self.api_key)} characters)")
+        print(f"INDEX NAME: {self.index_name}")
+        print(f"INDEX HOST: {self.host}")
+        print("ENABLED: True")
+        print("==========================================")
 
-            print(
-                "⚠️ Pinecone configuration incomplete."
-            )
+        # ----------------------------------------------------
+        # Test connection immediately
+        # ----------------------------------------------------
 
-            if not PINECONE_API_KEY:
-                print("   API key: MISSING")
-            else:
-                print("   API key: SET")
-
-            if not PINECONE_INDEX_HOST:
-                print("   Index host: MISSING")
-            else:
-                print("   Index host: SET")
-
-            print(
-                f"   Index name: {PINECONE_INDEX_NAME}"
-            )
+        self._test_connection()
 
 
     # ========================================================
@@ -216,7 +112,6 @@ class PineconeMemory:
     # ========================================================
 
     def _headers(self):
-
         return {
             "Api-Key": self.api_key,
             "Content-Type": "application/json",
@@ -225,16 +120,66 @@ class PineconeMemory:
 
 
     # ========================================================
-    # EMBEDDINGS
+    # CONNECTION TEST
+    # ========================================================
+
+    def _test_connection(self):
+        if not self.enabled:
+            return False
+
+        try:
+            url = f"{self.host}/describe_index_stats"
+
+            response = requests.post(
+                url,
+                headers=self._headers(),
+                json={},
+                timeout=15,
+            )
+
+            print(
+                f"🔌 Pinecone connection test: "
+                f"HTTP {response.status_code}"
+            )
+
+            if response.status_code == 200:
+                self.connected = True
+
+                try:
+                    data = response.json()
+                    vectors = data.get("totalVectorCount", 0)
+                    print(
+                        f"✅ Pinecone connected — "
+                        f"{vectors} vectors"
+                    )
+                except Exception:
+                    print("✅ Pinecone connected.")
+
+                return True
+
+            print(
+                "❌ Pinecone connection failed: "
+                f"{response.text[:300]}"
+            )
+
+            self.connected = False
+            return False
+
+        except Exception as e:
+            print(f"❌ Pinecone connection error: {e}")
+            self.connected = False
+            return False
+
+
+    # ========================================================
+    # EMBEDDING
     # ========================================================
 
     def _embed(self, text):
-
         if not self.enabled:
             return None
 
         try:
-
             url = "https://api.pinecone.io/embed"
 
             body = {
@@ -258,13 +203,11 @@ class PineconeMemory:
             )
 
             if response.status_code != 200:
-
                 print(
-                    "⚠️ Pinecone Embed HTTP "
+                    f"⚠️ Pinecone embedding HTTP "
                     f"{response.status_code}: "
                     f"{response.text[:300]}"
                 )
-
                 return None
 
             data = response.json()
@@ -272,18 +215,14 @@ class PineconeMemory:
             values = data["data"][0]["values"]
 
             print(
-                f"🧠 Embedding generated: "
+                f"🧠 Pinecone embedding generated: "
                 f"{len(values)} dimensions"
             )
 
             return values
 
         except Exception as e:
-
-            print(
-                f"⚠️ Pinecone embed failed: {e}"
-            )
-
+            print(f"⚠️ Pinecone embedding failed: {e}")
             return None
 
 
@@ -298,9 +237,9 @@ class PineconeMemory:
         category="conversation",
         importance=3,
     ):
-
         if not self.enabled:
-            return
+            print("ℹ️ Pinecone store skipped: disabled.")
+            return False
 
         combined = (
             f"User: {user_message}\n"
@@ -310,37 +249,34 @@ class PineconeMemory:
         vector = self._embed(combined)
 
         if not vector:
-            return
+            return False
 
         memory_id = (
             f"{self.user_name}-"
             f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
         )
 
+        body = {
+            "vectors": [
+                {
+                    "id": memory_id,
+                    "values": vector,
+                    "metadata": {
+                        "user_name": self.user_name,
+                        "user_message": user_message[:500],
+                        "ruby_reply": ruby_reply[:500],
+                        "category": category,
+                        "importance": importance,
+                        "timestamp": datetime.now().isoformat(
+                            timespec="seconds"
+                        ),
+                    },
+                }
+            ]
+        }
+
         try:
-
-            url = (
-                f"{self.host}/vectors/upsert"
-            )
-
-            body = {
-                "vectors": [
-                    {
-                        "id": memory_id,
-                        "values": vector,
-                        "metadata": {
-                            "user_name": self.user_name,
-                            "user_message": user_message[:500],
-                            "ruby_reply": ruby_reply[:500],
-                            "category": category,
-                            "importance": importance,
-                            "timestamp": datetime.now().isoformat(
-                                timespec="seconds"
-                            ),
-                        },
-                    }
-                ]
-            }
+            url = f"{self.host}/vectors/upsert"
 
             response = requests.post(
                 url,
@@ -349,41 +285,31 @@ class PineconeMemory:
                 timeout=20,
             )
 
-            if response.status_code not in (
-                200,
-                201,
-            ):
-
+            if response.status_code in (200, 201):
                 print(
-                    "⚠️ Pinecone upsert HTTP "
-                    f"{response.status_code}: "
-                    f"{response.text[:300]}"
-                )
-
-            else:
-
-                print(
-                    f"💾 Pinecone memory stored: "
+                    f"☁️ Pinecone memory stored: "
                     f"{memory_id}"
                 )
-
-        except Exception as e:
+                return True
 
             print(
-                f"⚠️ Pinecone store failed: {e}"
+                f"⚠️ Pinecone upsert HTTP "
+                f"{response.status_code}: "
+                f"{response.text[:300]}"
             )
 
+            return False
+
+        except Exception as e:
+            print(f"⚠️ Pinecone store failed: {e}")
+            return False
+
 
     # ========================================================
-    # SEARCH MEMORY
+    # SEARCH
     # ========================================================
 
-    def search(
-        self,
-        query,
-        limit=5,
-    ):
-
+    def search(self, query, limit=5):
         if not self.enabled:
             return []
 
@@ -393,10 +319,7 @@ class PineconeMemory:
             return []
 
         try:
-
-            url = (
-                f"{self.host}/query"
-            )
+            url = f"{self.host}/query"
 
             body = {
                 "vector": vector,
@@ -417,36 +340,24 @@ class PineconeMemory:
             )
 
             if response.status_code != 200:
-
                 print(
-                    "⚠️ Pinecone query HTTP "
+                    f"⚠️ Pinecone query HTTP "
                     f"{response.status_code}: "
                     f"{response.text[:300]}"
                 )
-
                 return []
 
             data = response.json()
 
             memories = []
 
-            for match in data.get(
-                "matches",
-                [],
-            ):
-
-                metadata = match.get(
-                    "metadata",
-                    {},
-                )
+            for match in data.get("matches", []):
+                metadata = match.get("metadata", {})
 
                 memories.append(
                     {
                         "score": round(
-                            match.get(
-                                "score",
-                                0,
-                            ),
+                            match.get("score", 0),
                             3,
                         ),
                         "user_message": metadata.get(
@@ -471,11 +382,7 @@ class PineconeMemory:
             return memories
 
         except Exception as e:
-
-            print(
-                f"⚠️ Pinecone search failed: {e}"
-            )
-
+            print(f"⚠️ Pinecone search failed: {e}")
             return []
 
 
@@ -483,12 +390,7 @@ class PineconeMemory:
     # BUILD CONTEXT
     # ========================================================
 
-    def build_context(
-        self,
-        user_message,
-        limit=3,
-    ):
-
+    def build_context(self, user_message, limit=3):
         memories = self.search(
             user_message,
             limit=limit,
@@ -500,18 +402,15 @@ class PineconeMemory:
         lines = []
 
         for memory in memories:
-
             if memory["score"] < 0.5:
                 continue
 
             lines.append(
-                f"- he said: "
-                f"{memory['user_message']}"
+                f"- he said: {memory['user_message']}"
             )
 
             lines.append(
-                f"  you replied: "
-                f"{memory['ruby_reply']}"
+                f"  you replied: {memory['ruby_reply']}"
             )
 
         if not lines:
@@ -524,58 +423,49 @@ class PineconeMemory:
 
 
     # ========================================================
-    # ENABLED STATUS
+    # ENABLED
     # ========================================================
 
     def is_enabled(self):
-
         return self.enabled
 
 
     # ========================================================
-    # STATS / CONNECTION STATUS
+    # STATS
     # ========================================================
 
     def stats(self):
-
-        # ----------------------------------------------------
-        # Configuration missing
-        # ----------------------------------------------------
-
         if not self.enabled:
-
             return {
-                "status": "error",
-                "message": (
-                    _config_error
-                    or
-                    "Pinecone API key or index host is missing"
-                ),
+                "status": "disabled",
+                "index_name": self.index_name,
+                "host_configured": False,
+                "api_key_configured": False,
             }
 
-        # ----------------------------------------------------
-        # Test actual Pinecone connection
-        # ----------------------------------------------------
-
         try:
-
-            url = (
-                f"{self.host}/describe_index_stats"
-            )
+            url = f"{self.host}/describe_index_stats"
 
             response = requests.post(
                 url,
                 headers=self._headers(),
                 json={},
-                timeout=20,
+                timeout=15,
             )
 
             if response.status_code != 200:
+                print(
+                    f"⚠️ Pinecone stats HTTP "
+                    f"{response.status_code}: "
+                    f"{response.text[:300]}"
+                )
 
                 return {
                     "status": "error",
                     "code": response.status_code,
-                    "message": response.text[:300],
+                    "index_name": self.index_name,
+                    "host_configured": True,
+                    "api_key_configured": True,
                 }
 
             data = response.json()
@@ -586,30 +476,35 @@ class PineconeMemory:
                     "totalVectorCount",
                     0,
                 ),
+                "index_name": self.index_name,
+                "host_configured": True,
+                "api_key_configured": True,
             }
 
         except Exception as e:
+            print(
+                f"⚠️ Pinecone stats failed: {e}"
+            )
 
             return {
                 "status": "error",
-                "message": str(e)[:300],
+                "message": str(e)[:200],
+                "index_name": self.index_name,
+                "host_configured": True,
+                "api_key_configured": True,
             }
 
 
     # ========================================================
-    # WIPE RUBY'S PINECONE MEMORIES
+    # WIPE
     # ========================================================
 
     def wipe(self):
-
         if not self.enabled:
-            return
+            return False
 
         try:
-
-            url = (
-                f"{self.host}/vectors/delete"
-            )
+            url = f"{self.host}/vectors/delete"
 
             body = {
                 "filter": {
@@ -626,26 +521,23 @@ class PineconeMemory:
                 timeout=20,
             )
 
-            if response.status_code not in (
-                200,
-                201,
-            ):
-
-                print(
-                    "⚠️ Pinecone wipe HTTP "
-                    f"{response.status_code}: "
-                    f"{response.text[:300]}"
-                )
-
-            else:
-
+            if response.status_code in (200, 201):
                 print(
                     f"🗑️ Pinecone wiped for "
                     f"{self.user_name}"
                 )
+                return True
+
+            print(
+                f"⚠️ Pinecone wipe HTTP "
+                f"{response.status_code}: "
+                f"{response.text[:300]}"
+            )
+
+            return False
 
         except Exception as e:
-
             print(
                 f"⚠️ Pinecone wipe failed: {e}"
             )
+            return False
