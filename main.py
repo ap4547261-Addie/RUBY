@@ -6,10 +6,7 @@ import flet as ft
 
 # ============================================================
 # FLET 1.0 COMPATIBILITY LAYER
-# Flet 1.0 renamed several things. These shims make old code work.
 # ============================================================
-
-# 1) Button classes renamed in 1.0
 _ALIASES = {
     "ElevatedButton": "Button",
     "FilledButton": "Button",
@@ -20,11 +17,8 @@ for _old, _new in _ALIASES.items():
         setattr(ft, _old, getattr(ft, _new))
 
 
-# 2) page.open(dialog) / page.close(dialog) removed in 1.0.
-#    Flet 1.0 wants dialogs registered first, then opened.
 def _make_page_open():
     def _page_open(self, dialog):
-        # Try modern methods first
         for mname in ("show_dialog", "open_dialog"):
             m = getattr(self, mname, None)
             if callable(m):
@@ -33,8 +27,6 @@ def _make_page_open():
                     return
                 except Exception as e:
                     print(f"⚠️ {mname} failed: {e}")
-
-        # Legacy fallback: register the dialog, then open
         registered = False
         try:
             if hasattr(self, "services"):
@@ -43,26 +35,22 @@ def _make_page_open():
                 registered = True
         except Exception as e:
             print(f"⚠️ services append failed: {e}")
-
         if not registered and hasattr(self, "overlay"):
             try:
                 if dialog not in self.overlay:
                     self.overlay.append(dialog)
             except Exception as e:
                 print(f"⚠️ overlay append failed: {e}")
-
         try:
             dialog.open = True
             self.update()
         except Exception as e:
             print(f"⚠️ page.open legacy failed: {e}")
-
     return _page_open
 
 
 def _make_page_close():
     def _page_close(self, dialog=None):
-        # Try modern methods first
         for mname in ("pop_dialog", "close_dialog"):
             m = getattr(self, mname, None)
             if callable(m):
@@ -74,15 +62,12 @@ def _make_page_close():
                     return
                 except Exception as e:
                     print(f"⚠️ {mname} failed: {e}")
-
-        # Legacy fallback
         try:
             if dialog is not None:
                 dialog.open = False
             self.update()
         except Exception as e:
             print(f"⚠️ page.close legacy failed: {e}")
-
     return _page_close
 
 
@@ -94,9 +79,6 @@ if not hasattr(ft.Page, "open_dialog"):
     ft.Page.open_dialog = ft.Page.open
 if not hasattr(ft.Page, "close_dialog"):
     ft.Page.close_dialog = ft.Page.close
-
-# ============================================================
-# end compatibility layer
 # ============================================================
 
 
@@ -157,16 +139,13 @@ def main(page: ft.Page):
         stable_dir = os.path.join(storage_dir, "models")
         os.makedirs(stable_dir, exist_ok=True)
         stable_path = os.path.join(stable_dir, original_name)
-
         try:
             if os.path.abspath(original_path) == os.path.abspath(stable_path):
                 return stable_path
         except Exception:
             pass
-
         if os.path.exists(stable_path):
             return stable_path
-
         try:
             print(f"📦 Copying model to permanent storage: {stable_path}")
             shutil.copy(original_path, stable_path)
@@ -179,10 +158,8 @@ def main(page: ft.Page):
     def load_model(path, name):
         status.value = f"🧠 Loading {name}..."
         page.update()
-
         stable_path = get_stable_model_path(path, name)
         success = brain.load_model(stable_path)
-
         if success:
             status.value = f"🧠 {name} loaded. Ruby is awake!"
             settings.set("model_path", stable_path)
@@ -199,7 +176,6 @@ def main(page: ft.Page):
             status.value = "❌ No file path provided."
             page.update()
             return
-
         action = file_picker_mode.get("action")
         if action == "model":
             load_model(f.path, f.name)
