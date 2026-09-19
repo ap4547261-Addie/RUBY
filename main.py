@@ -1,10 +1,15 @@
-# main.py - Ruby V1.6 (Flet 1.0 compatible + Childhood memory)
+# main.py - Ruby V1.6 (Flet 1.0 fully compatible)
 
 import os
 import shutil
 import flet as ft
 
-# ---- Flet 1.0 compatibility shims ----
+# ============================================================
+# FLET 1.0 COMPATIBILITY SHIMS
+# ============================================================
+# Flet 1.0 renamed several controls and Page methods.
+# These shims let old names keep working without touching the rest of the code.
+
 _ALIASES = {
     "ElevatedButton": "Button",
     "FilledButton": "Button",
@@ -13,7 +18,36 @@ _ALIASES = {
 for _old, _new in _ALIASES.items():
     if not hasattr(ft, _old) and hasattr(ft, _new):
         setattr(ft, _old, getattr(ft, _new))
-# ---- end compatibility shims ----
+
+# Page.open / Page.close for dialogs were removed in Flet 1.0
+if not hasattr(ft.Page, "open"):
+    def _page_open(self, dialog):
+        try:
+            dialog.open = True
+            self.update()
+        except Exception as e:
+            print(f"⚠️ page.open shim failed: {e}")
+    ft.Page.open = _page_open
+
+if not hasattr(ft.Page, "close"):
+    def _page_close(self, dialog=None):
+        try:
+            if dialog is not None:
+                dialog.open = False
+            self.update()
+        except Exception as e:
+            print(f"⚠️ page.close shim failed: {e}")
+    ft.Page.close = _page_close
+
+# Some Flet builds use open_dialog / close_dialog instead
+if not hasattr(ft.Page, "open_dialog"):
+    ft.Page.open_dialog = ft.Page.open
+if not hasattr(ft.Page, "close_dialog"):
+    ft.Page.close_dialog = ft.Page.close
+# ============================================================
+# end of compatibility shims
+# ============================================================
+
 
 from brain.local_brain import LocalBrain
 from brain.response_engine import ResponseEngine
@@ -27,12 +61,18 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = "#101014"
 
+    # ----------------------------------------
+    # Core
+    # ----------------------------------------
     brain = LocalBrain()
     settings = SettingsManager()
 
     user_name = settings.get("user_name", "not_set")
     response_engine = ResponseEngine(brain, user_name=user_name, platform="private")
 
+    # ----------------------------------------
+    # UI
+    # ----------------------------------------
     chat = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO, spacing=10)
     status = ft.Text("🧠 Ruby's brain is not loaded.", color=ft.Colors.GREY_400, size=12)
 
@@ -50,6 +90,9 @@ def main(page: ft.Page):
         page.snack_bar.open = True
         page.update()
 
+    # ----------------------------------------
+    # Load chat history
+    # ----------------------------------------
     def load_chat_history():
         try:
             from memory.episodic_memory import EpisodicMemory
@@ -67,6 +110,9 @@ def main(page: ft.Page):
         except Exception as ex:
             print(f"⚠️ Could not load chat history: {ex}")
 
+    # ----------------------------------------
+    # Stable model path
+    # ----------------------------------------
     def get_stable_model_path(original_path, original_name):
         storage_dir = os.getenv("FLET_APP_STORAGE_DATA", ".")
         stable_dir = os.path.join(storage_dir, "models")
@@ -91,6 +137,9 @@ def main(page: ft.Page):
             print(f"⚠️ Copy failed, using original path: {e}")
             return original_path
 
+    # ----------------------------------------
+    # Model Loading
+    # ----------------------------------------
     def load_model(path, name):
         status.value = f"🧠 Loading {name}..."
         page.update()
@@ -106,6 +155,9 @@ def main(page: ft.Page):
             status.value = f"❌ Failed to load {name}"
             page.update()
 
+    # ----------------------------------------
+    # File Picker
+    # ----------------------------------------
     def handle_file_pick(e: ft.FilePickerResultEvent):
         if not e.files:
             return
@@ -132,7 +184,11 @@ def main(page: ft.Page):
     except AttributeError:
         page.overlay.append(file_picker)
 
+    # ----------------------------------------
+    # Settings Dialog
+    # ----------------------------------------
     def open_settings(e):
+        # --- Account fields ---
         name_field = ft.TextField(
             label="Name",
             value=settings.get("user_name", ""),
@@ -151,6 +207,7 @@ def main(page: ft.Page):
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
+        # --- Brain fields ---
         model_name_label = ft.Text(
             settings.get("model_name") or "No model selected",
             size=13, color=ft.Colors.GREY_400,
@@ -497,6 +554,7 @@ def main(page: ft.Page):
         except Exception as int_ex:
             integration_lines = [ft.Text(f"Integrations unavailable: {int_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
             file_picker_mode["action"] = "model"
@@ -553,6 +611,7 @@ def main(page: ft.Page):
                 show_snack(f"❌ Wipe failed: {ex}")
             page.update()
 
+        # --- Dialog ---
         settings_dialog = ft.AlertDialog(
             title=ft.Text("⚙️ Settings"),
             content=ft.Column(
@@ -641,6 +700,9 @@ def main(page: ft.Page):
         )
         page.open(settings_dialog)
 
+    # ----------------------------------------
+    # Send Message
+    # ----------------------------------------
     def send_message(e):
         msg = message_box.value.strip()
         if not msg:
@@ -664,6 +726,9 @@ def main(page: ft.Page):
         status.value = "🧠 Ruby is ready."
         add_message("Ruby", reply)
 
+    # ----------------------------------------
+    # Layout
+    # ----------------------------------------
     message_box = ft.TextField(
         hint_text="Talk to Ruby...", expand=True, multiline=False,
         on_submit=send_message, bgcolor="#18181C", color=ft.Colors.WHITE,
