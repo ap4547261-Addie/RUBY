@@ -134,7 +134,7 @@ def main(page: ft.Page):
         file_picker_mode["action"] = None
 
     file_picker = ft.FilePicker(on_result=handle_file_pick)
-    page.overlay.append(file_picker)
+    page.services.append(file_picker)
 
     # ----------------------------------------
     # Settings Dialog
