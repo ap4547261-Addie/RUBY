@@ -1,8 +1,20 @@
-# main.py - Ruby V1.6 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning + Personality + Evolution + Integrations)
+# main.py - Ruby V1.6 (Flet 1.0 compatible)
 
 import os
 import shutil
 import flet as ft
+
+# ---- Flet 1.0 compatibility shims ----
+# Flet 1.0 renamed several controls. These aliases keep old names working.
+_ALIASES = {
+    "ElevatedButton": "Button",
+    "FilledButton": "Button",
+    "FilledTonalButton": "Button",
+}
+for _old, _new in _ALIASES.items():
+    if not hasattr(ft, _old) and hasattr(ft, _new):
+        setattr(ft, _old, getattr(ft, _new))
+# ---- end compatibility shims ----
 
 from brain.local_brain import LocalBrain
 from brain.response_engine import ResponseEngine
@@ -16,18 +28,12 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor = "#101014"
 
-    # ----------------------------------------
-    # Core
-    # ----------------------------------------
     brain = LocalBrain()
     settings = SettingsManager()
 
     user_name = settings.get("user_name", "not_set")
     response_engine = ResponseEngine(brain, user_name=user_name, platform="private")
 
-    # ----------------------------------------
-    # UI
-    # ----------------------------------------
     chat = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO, spacing=10)
     status = ft.Text("🧠 Ruby's brain is not loaded.", color=ft.Colors.GREY_400, size=12)
 
@@ -45,9 +51,6 @@ def main(page: ft.Page):
         page.snack_bar.open = True
         page.update()
 
-    # ----------------------------------------
-    # Load chat history
-    # ----------------------------------------
     def load_chat_history():
         try:
             from memory.episodic_memory import EpisodicMemory
@@ -65,9 +68,6 @@ def main(page: ft.Page):
         except Exception as ex:
             print(f"⚠️ Could not load chat history: {ex}")
 
-    # ----------------------------------------
-    # Stable model path
-    # ----------------------------------------
     def get_stable_model_path(original_path, original_name):
         storage_dir = os.getenv("FLET_APP_STORAGE_DATA", ".")
         stable_dir = os.path.join(storage_dir, "models")
@@ -92,9 +92,6 @@ def main(page: ft.Page):
             print(f"⚠️ Copy failed, using original path: {e}")
             return original_path
 
-    # ----------------------------------------
-    # Model Loading
-    # ----------------------------------------
     def load_model(path, name):
         status.value = f"🧠 Loading {name}..."
         page.update()
@@ -110,9 +107,6 @@ def main(page: ft.Page):
             status.value = f"❌ Failed to load {name}"
             page.update()
 
-    # ----------------------------------------
-    # File Picker
-    # ----------------------------------------
     def handle_file_pick(e: ft.FilePickerResultEvent):
         if not e.files:
             return
@@ -134,13 +128,14 @@ def main(page: ft.Page):
         file_picker_mode["action"] = None
 
     file_picker = ft.FilePicker(on_result=handle_file_pick)
-    page.services.append(file_picker)
 
-    # ----------------------------------------
-    # Settings Dialog
-    # ----------------------------------------
+    # Flet 1.0: FilePicker is a service, not an overlay control
+    try:
+        page.services.append(file_picker)
+    except AttributeError:
+        page.overlay.append(file_picker)
+
     def open_settings(e):
-        # --- Account fields ---
         name_field = ft.TextField(
             label="Name",
             value=settings.get("user_name", ""),
@@ -159,7 +154,6 @@ def main(page: ft.Page):
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
-        # --- Brain fields ---
         model_name_label = ft.Text(
             settings.get("model_name") or "No model selected",
             size=13, color=ft.Colors.GREY_400,
@@ -180,7 +174,6 @@ def main(page: ft.Page):
         last_backup = settings.get("last_backup") or "Never"
         backup_label = ft.Text(f"Last backup: {last_backup}", size=12, color=ft.Colors.GREY_400)
 
-        # --- Memory (V0.4) ---
         try:
             stats = response_engine.memory_stats()
             rel = stats["relationship"]
@@ -200,7 +193,6 @@ def main(page: ft.Page):
             mem_resp = ft.Text("", size=12)
             mem_att = ft.Text("", size=12)
 
-        # --- Internal State (V0.5) ---
         try:
             inner_data = response_engine.internal_state_stats()
             inner_energy = ft.Text(f"Energy: {inner_data['energy']}", size=12, color=ft.Colors.CYAN_300)
@@ -213,7 +205,6 @@ def main(page: ft.Page):
             inner_tension = ft.Text("", size=12)
             inner_irrit = ft.Text("", size=12)
 
-        # --- Emotions (V0.6) ---
         try:
             emo = response_engine.emotion_stats()
             shown = {k: v for k, v in emo.items() if v != 0}
@@ -228,7 +219,6 @@ def main(page: ft.Page):
         except Exception as emo_ex:
             emo_lines = [ft.Text(f"Emotions unavailable: {emo_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Identity (V0.7) ---
         try:
             beliefs = response_engine.identity_stats()
             if beliefs:
@@ -245,7 +235,6 @@ def main(page: ft.Page):
         except Exception as ident_ex:
             identity_lines = [ft.Text(f"Identity unavailable: {ident_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Social (V0.8) ---
         try:
             social = response_engine.social_stats()
             if social:
@@ -270,7 +259,6 @@ def main(page: ft.Page):
         except Exception as social_ex:
             social_lines = [ft.Text(f"Social unavailable: {social_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Reflection (V0.9) ---
         try:
             refl_counts = response_engine.reflection_stats()
             refl_recent = response_engine.reflections_recent()
@@ -290,7 +278,6 @@ def main(page: ft.Page):
         except Exception as refl_ex:
             reflection_lines = [ft.Text(f"Reflection unavailable: {refl_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Motivation (V1.0) ---
         try:
             drives = response_engine.drives_stats()
             if drives:
@@ -304,7 +291,6 @@ def main(page: ft.Page):
         except Exception as mot_ex:
             motivation_lines = [ft.Text(f"Motivation unavailable: {mot_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Cognition (V1.2) ---
         try:
             trace = response_engine.cognition_trace()
             if trace:
@@ -336,7 +322,6 @@ def main(page: ft.Page):
         except Exception as cog_ex:
             cognition_lines = [ft.Text(f"Cognition unavailable: {cog_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Learning (V1.3) ---
         try:
             learning_lines = []
 
@@ -383,7 +368,6 @@ def main(page: ft.Page):
         except Exception as learn_ex:
             learning_lines = [ft.Text(f"Learning unavailable: {learn_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Personality (V1.4) ---
         try:
             traits = response_engine.personality_stats()
             if traits:
@@ -396,7 +380,6 @@ def main(page: ft.Page):
         except Exception as pers_ex:
             personality_lines = [ft.Text(f"Personality unavailable: {pers_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Evolution (V1.5) ---
         try:
             evolution_lines = []
 
@@ -433,7 +416,6 @@ def main(page: ft.Page):
             integration_lines = []
             int_stats = response_engine.integration_stats()
 
-            # Pinecone status
             pinecone = int_stats.get("pinecone", {})
             pc_status = pinecone.get("status", "disabled")
             if pc_status == "connected":
@@ -453,14 +435,12 @@ def main(page: ft.Page):
                 ft.Text(f"Pinecone: {pc_text}", size=12, color=pc_color)
             )
 
-            # Cloud sync status
             cloud = int_stats.get("cloud", {})
             backup_count = cloud.get("backup_count", 0)
             integration_lines.append(
                 ft.Text(f"Local backups: {backup_count}", size=12, color=ft.Colors.CYAN_200)
             )
 
-            # Backup button
             def do_backup(ev):
                 try:
                     path = response_engine.integrations.backup()
@@ -487,7 +467,6 @@ def main(page: ft.Page):
         except Exception as int_ex:
             integration_lines = [ft.Text(f"Integrations unavailable: {int_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Actions ---
         def pick_model(ev):
             page.close(settings_dialog)
             file_picker_mode["action"] = "model"
@@ -544,7 +523,6 @@ def main(page: ft.Page):
                 show_snack(f"❌ Wipe failed: {ex}")
             page.update()
 
-        # --- Dialog ---
         settings_dialog = ft.AlertDialog(
             title=ft.Text("⚙️ Settings"),
             content=ft.Column(
@@ -629,9 +607,6 @@ def main(page: ft.Page):
         )
         page.open(settings_dialog)
 
-    # ----------------------------------------
-    # Send Message
-    # ----------------------------------------
     def send_message(e):
         msg = message_box.value.strip()
         if not msg:
@@ -655,9 +630,6 @@ def main(page: ft.Page):
         status.value = "🧠 Ruby is ready."
         add_message("Ruby", reply)
 
-    # ----------------------------------------
-    # Layout
-    # ----------------------------------------
     message_box = ft.TextField(
         hint_text="Talk to Ruby...", expand=True, multiline=False,
         on_submit=send_message, bgcolor="#18181C", color=ft.Colors.WHITE,
@@ -698,4 +670,8 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main)
+    # Flet 1.0: use ft.run() instead of ft.app()
+    try:
+        ft.run(main)
+    except AttributeError:
+        ft.app(target=main)
