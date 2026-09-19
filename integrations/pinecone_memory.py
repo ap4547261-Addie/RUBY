@@ -25,7 +25,7 @@ if _PROJECT_ROOT not in sys.path:
 
 PINECONE_API_KEY = None
 PINECONE_INDEX_HOST = None
-PINECONE_INDEX_NAME = "ruby-memory"
+PINECONE_INDEX_NAME = "ruby"
 
 _config_error = None
 
@@ -50,7 +50,7 @@ try:
     PINECONE_API_KEY = _BUNDLED_API_KEY
     PINECONE_INDEX_HOST = _BUNDLED_INDEX_HOST
     PINECONE_INDEX_NAME = (
-        _BUNDLED_INDEX_NAME or "ruby-memory"
+        _BUNDLED_INDEX_NAME or "ruby"
     )
 
     print("✅ Bundled Pinecone config loaded")
@@ -81,7 +81,7 @@ if not PINECONE_INDEX_HOST:
 if not PINECONE_INDEX_NAME:
     PINECONE_INDEX_NAME = os.getenv(
         "PINECONE_INDEX_NAME",
-        "ruby-memory",
+        "ruby",
     )
 
 
@@ -167,7 +167,7 @@ except Exception:
 # The REST API receives the actual embedding returned
 # by Pinecone's embedding service.
 
-EMBEDDING_DIMENSION = 1025
+EMBEDDING_DIMENSION = 1024
 
 API_VERSION = "2025-01"
 
