@@ -18,9 +18,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install build tools
-        run: pip install flet==0.26.0 flet-cli==0.26.0
-
       - name: Install dependencies
         run: pip install -r requirements.txt
 
