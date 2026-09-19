@@ -30,7 +30,7 @@ jobs:
           EOF
 
       - name: Build APK
-        run: flet build apk
+        run: flet build apk --yes
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
