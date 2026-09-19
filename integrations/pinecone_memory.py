@@ -1,10 +1,15 @@
 import os
+import sys
 import json
 import hashlib
 from datetime import datetime
 
 import requests
 
+# Make sure the project root is on sys.path so config_secrets.py can be found
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_HOST = os.getenv("PINECONE_INDEX_HOST")
@@ -18,8 +23,14 @@ if not PINECONE_API_KEY:
             PINECONE_INDEX_NAME,
         )
         print("🔑 Loaded Pinecone config from bundled secrets.")
-    except ImportError:
-        pass
+    except ImportError as e:
+        print(f"⚠️ config_secrets not found: {e}")
+
+# Debug print so we can see what actually arrived in the APK
+print(f"🔍 Pinecone config:")
+print(f"   API_KEY: {'SET' if PINECONE_API_KEY else 'NOT SET'}")
+print(f"   HOST: {'SET' if PINECONE_INDEX_HOST else 'NOT SET'}")
+print(f"   NAME: {PINECONE_INDEX_NAME}")
 
 EMBEDDING_DIMENSION = 384
 API_VERSION = "2025-01"
