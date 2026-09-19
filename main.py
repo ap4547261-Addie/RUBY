@@ -1,11 +1,10 @@
-# main.py - Ruby V1.6 (Flet 1.0 compatible)
+# main.py - Ruby V1.6 (Flet 1.0 compatible + Childhood memory)
 
 import os
 import shutil
 import flet as ft
 
 # ---- Flet 1.0 compatibility shims ----
-# Flet 1.0 renamed several controls. These aliases keep old names working.
 _ALIASES = {
     "ElevatedButton": "Button",
     "FilledButton": "Button",
@@ -128,8 +127,6 @@ def main(page: ft.Page):
         file_picker_mode["action"] = None
 
     file_picker = ft.FilePicker(on_result=handle_file_pick)
-
-    # Flet 1.0: FilePicker is a service, not an overlay control
     try:
         page.services.append(file_picker)
     except AttributeError:
@@ -174,6 +171,7 @@ def main(page: ft.Page):
         last_backup = settings.get("last_backup") or "Never"
         backup_label = ft.Text(f"Last backup: {last_backup}", size=12, color=ft.Colors.GREY_400)
 
+        # --- Memory (V0.4) ---
         try:
             stats = response_engine.memory_stats()
             rel = stats["relationship"]
@@ -193,6 +191,29 @@ def main(page: ft.Page):
             mem_resp = ft.Text("", size=12)
             mem_att = ft.Text("", size=12)
 
+        # --- Childhood (new) ---
+        try:
+            childhood_mems = response_engine.childhood_stats()
+            if childhood_mems:
+                childhood_lines = []
+                for m in childhood_mems:
+                    childhood_lines.append(
+                        ft.Text(
+                            f"🧸 [age {m['age']}] {m['title']} "
+                            f"(weight {m['weight']}, surfaced {m['times_surfaced']}x)",
+                            size=11, color=ft.Colors.ORANGE_200,
+                        )
+                    )
+                    childhood_lines.append(
+                        ft.Text(f"   {m['story'][:100]}...",
+                                size=10, color=ft.Colors.GREY_400)
+                    )
+            else:
+                childhood_lines = [ft.Text("No childhood memories.", size=12, color=ft.Colors.GREY_500)]
+        except Exception as ch_ex:
+            childhood_lines = [ft.Text(f"Childhood unavailable: {ch_ex}", size=12, color=ft.Colors.RED_300)]
+
+        # --- Internal State (V0.5) ---
         try:
             inner_data = response_engine.internal_state_stats()
             inner_energy = ft.Text(f"Energy: {inner_data['energy']}", size=12, color=ft.Colors.CYAN_300)
@@ -205,6 +226,7 @@ def main(page: ft.Page):
             inner_tension = ft.Text("", size=12)
             inner_irrit = ft.Text("", size=12)
 
+        # --- Emotions (V0.6) ---
         try:
             emo = response_engine.emotion_stats()
             shown = {k: v for k, v in emo.items() if v != 0}
@@ -219,6 +241,7 @@ def main(page: ft.Page):
         except Exception as emo_ex:
             emo_lines = [ft.Text(f"Emotions unavailable: {emo_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Identity (V0.7) ---
         try:
             beliefs = response_engine.identity_stats()
             if beliefs:
@@ -235,6 +258,7 @@ def main(page: ft.Page):
         except Exception as ident_ex:
             identity_lines = [ft.Text(f"Identity unavailable: {ident_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Social (V0.8) ---
         try:
             social = response_engine.social_stats()
             if social:
@@ -259,6 +283,7 @@ def main(page: ft.Page):
         except Exception as social_ex:
             social_lines = [ft.Text(f"Social unavailable: {social_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Reflection (V0.9) ---
         try:
             refl_counts = response_engine.reflection_stats()
             refl_recent = response_engine.reflections_recent()
@@ -278,6 +303,7 @@ def main(page: ft.Page):
         except Exception as refl_ex:
             reflection_lines = [ft.Text(f"Reflection unavailable: {refl_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Motivation (V1.0) ---
         try:
             drives = response_engine.drives_stats()
             if drives:
@@ -291,6 +317,7 @@ def main(page: ft.Page):
         except Exception as mot_ex:
             motivation_lines = [ft.Text(f"Motivation unavailable: {mot_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Cognition (V1.2) ---
         try:
             trace = response_engine.cognition_trace()
             if trace:
@@ -322,6 +349,7 @@ def main(page: ft.Page):
         except Exception as cog_ex:
             cognition_lines = [ft.Text(f"Cognition unavailable: {cog_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Learning (V1.3) ---
         try:
             learning_lines = []
 
@@ -368,6 +396,7 @@ def main(page: ft.Page):
         except Exception as learn_ex:
             learning_lines = [ft.Text(f"Learning unavailable: {learn_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Personality (V1.4) ---
         try:
             traits = response_engine.personality_stats()
             if traits:
@@ -380,6 +409,7 @@ def main(page: ft.Page):
         except Exception as pers_ex:
             personality_lines = [ft.Text(f"Personality unavailable: {pers_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Evolution (V1.5) ---
         try:
             evolution_lines = []
 
@@ -543,6 +573,10 @@ def main(page: ft.Page):
                     mem_episodes, mem_facts, mem_msgs, mem_trust, mem_fam, mem_resp, mem_att,
                     ft.Divider(),
 
+                    ft.Text("🧸 Childhood", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
+                    *childhood_lines,
+                    ft.Divider(),
+
                     ft.Text("🧬 Internal State", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_300),
                     inner_energy, inner_warmth, inner_tension, inner_irrit,
                     ft.Divider(),
@@ -670,7 +704,6 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    # Flet 1.0: use ft.run() instead of ft.app()
     try:
         ft.run(main)
     except AttributeError:
