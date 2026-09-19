@@ -1,5 +1,6 @@
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
+from memory.childhood_memory import ChildhoodMemory
 from ruby_core.development import Development
 from emotion.emotion_engine import EmotionEngine
 from emotion.emotion_expression import EmotionExpression
@@ -8,6 +9,7 @@ from social.social_learning import SocialLearning
 from reflection.reflection_engine import ReflectionEngine
 from motivation.motivation_engine import MotivationEngine
 from cognition.cognition_engine import CognitionEngine
+from cognition.curiosity import Curiosity
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
 
@@ -37,6 +39,7 @@ class ResponseEngine:
         self.platform = platform
         self.short_term = ShortTermMemory(max_messages=10)
         self.memory = MemoryConsolidation(user_name=user_name)
+        self.childhood = ChildhoodMemory(user_name=user_name)
         self.dev = Development(user_name=user_name)
         self.emotion = EmotionEngine(user_name=user_name)
         self.emotion_expr = EmotionExpression()
@@ -45,6 +48,7 @@ class ResponseEngine:
         self.reflection = ReflectionEngine(user_name=user_name)
         self.motivation = MotivationEngine(user_name=user_name, platform=platform)
         self.cognition = CognitionEngine(user_name=user_name)
+        self.curiosity = Curiosity(user_name=user_name)
         self.learning = LearningEngine(user_name=user_name)
         self.personality = PersonalityDevelopment(user_name=user_name)
 
@@ -77,6 +81,14 @@ class ResponseEngine:
 
         # 1. Build context
         context = self.memory.build_context(user_message)
+
+        # Childhood memories — surface only when triggers match
+        try:
+            childhood_line = self.childhood.build_context(user_message, limit=2)
+            if childhood_line:
+                context = f"{context}\n\n{childhood_line}"
+        except Exception as e:
+            print(f"⚠️ childhood.build_context failed: {e}")
 
         try:
             inner_line = self.dev.describe()
@@ -157,6 +169,26 @@ class ResponseEngine:
             context = f"{context}\n\nYour thinking:\n{cognition_line}"
         except Exception as e:
             print(f"⚠️ cognition.process failed: {e}")
+
+        # Curiosity — she might ask a question back
+        try:
+            if trace is not None:
+                rel = self.memory.relationship.get_state()
+                inner = self.dev.state.get()
+                curiosity_directive = self.curiosity.process(
+                    user_message,
+                    decision=trace.get("decision", {}),
+                    context={
+                        "trust": rel["trust"],
+                        "attachment": rel["attachment"],
+                        "irritation": inner["irritation"],
+                        "warmth": inner["warmth"],
+                    },
+                )
+                if curiosity_directive:
+                    context = f"{context}\n\n{curiosity_directive}"
+        except Exception as e:
+            print(f"⚠️ curiosity failed: {e}")
 
         # Format prompt
         try:
@@ -333,6 +365,7 @@ class ResponseEngine:
         self.short_term.clear()
         self.memory.wipe_all()
         for name, obj in [
+            ("childhood", self.childhood),
             ("dev", self.dev),
             ("emotion", self.emotion),
             ("identity", self.identity),
@@ -340,6 +373,7 @@ class ResponseEngine:
             ("reflection", self.reflection),
             ("motivation", self.motivation),
             ("cognition", self.cognition),
+            ("curiosity", self.curiosity),
             ("learning", self.learning),
             ("personality", self.personality),
         ]:
@@ -365,6 +399,12 @@ class ResponseEngine:
 
     def memory_stats(self):
         return self.memory.stats()
+
+    def childhood_stats(self):
+        return self.childhood.get_all()
+
+    def childhood_count(self):
+        return self.childhood.count()
 
     def emotion_stats(self):
         return self.emotion.get_all()
@@ -429,6 +469,5 @@ class ResponseEngine:
     def evolution_preferences(self):
         return self.evolution.get_preferences() if self.evolution else []
 
-    # V1.6
     def integration_stats(self):
         return self.integrations.stats() if self.integrations else {}
