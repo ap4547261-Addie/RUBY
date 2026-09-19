@@ -1,4 +1,2 @@
 flet==0.26.0
-flet-cli==0.26.0
 llama-cpp-python==0.3.32
-pinecone-client>=5.0.0
