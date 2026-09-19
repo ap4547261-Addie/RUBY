@@ -16,7 +16,7 @@ try:
 except ImportError:
     PINECONE_API_KEY = ""
     PINECONE_INDEX_HOST = ""
-    PINECONE_INDEX_NAME = "ruby-memory"
+    PINECONE_INDEX_NAME = "ruby"
 
 # Environment variables override (for local testing)
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY") or PINECONE_API_KEY
