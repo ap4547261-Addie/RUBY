@@ -1,4 +1,4 @@
-# brain/response_engine.py — Ruby V1.7
+# brain/response_engine.py — Ruby V1.8
 
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
@@ -543,5 +543,28 @@ class ResponseEngine:
             res = self.web_knowledge.ingest(learned)
             res["title"] = r["title"]
             return res
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # ----------------------------------------
+    # V1.8 — Extension bridge
+    # ----------------------------------------
+    def ingest_extension_content(self, platform: str, url: str, content: str) -> dict:
+        """Ingest raw content from the Lemur extension. Reuses existing web instances."""
+        if not self.web_knowledge or not self.web_learning:
+            return {"ok": False, "error": "web module unavailable"}
+        if not content:
+            return {"ok": False, "error": "empty content"}
+        try:
+            title = f"{platform}: {(url or '')[:80]}" if url else platform
+            source = url or f"extension://{platform}"
+            learned = self.web_learning.process(title, content, source)
+            res = self.web_knowledge.ingest(learned)
+            return {
+                "ok": True,
+                "is_new": res.get("is_new"),
+                "title": title,
+                "platform": platform,
+            }
         except Exception as e:
             return {"ok": False, "error": str(e)}
