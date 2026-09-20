@@ -1,4 +1,4 @@
-# main.py - Ruby V1.7 (web learning added)
+# main.py - Ruby V1.8 (WebSocket bridge for Lemur extension)
 
 import os
 import shutil
@@ -8,6 +8,7 @@ from brain.local_brain import LocalBrain
 from brain.response_engine import ResponseEngine
 from prompts.ruby_prompt import RUBY_PROMPT
 from settings.settings_manager import SettingsManager
+from tools.ws_server import WSServer
 
 
 def main(page: ft.Page):
@@ -30,6 +31,7 @@ def main(page: ft.Page):
     # ----------------------------------------
     chat = ft.Column(expand=True, scroll=ft.ScrollMode.AUTO, spacing=10)
     status = ft.Text("🧠 Ruby's brain is not loaded.", color=ft.Colors.GREY_400, size=12)
+    ws_status = ft.Text("🔌 Extension: not connected", size=11, color=ft.Colors.GREY_500)
 
     file_picker_mode = {"action": None}
 
@@ -140,7 +142,6 @@ def main(page: ft.Page):
     # Settings Dialog
     # ----------------------------------------
     def open_settings(e):
-        # --- Account ---
         name_field = ft.TextField(
             label="Name",
             value=settings.get("user_name", ""),
@@ -159,7 +160,6 @@ def main(page: ft.Page):
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
 
-        # --- Brain ---
         model_name_label = ft.Text(
             settings.get("model_name") or "No model selected",
             size=13, color=ft.Colors.GREY_400,
@@ -180,7 +180,7 @@ def main(page: ft.Page):
         last_backup = settings.get("last_backup") or "Never"
         backup_label = ft.Text(f"Last backup: {last_backup}", size=12, color=ft.Colors.GREY_400)
 
-        # --- Memory (V0.4) ---
+        # --- Memory ---
         try:
             stats = response_engine.memory_stats()
             rel = stats["relationship"]
@@ -222,7 +222,7 @@ def main(page: ft.Page):
         except Exception as ch_ex:
             childhood_lines = [ft.Text(f"Childhood unavailable: {ch_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Internal State (V0.5) ---
+        # --- Internal State ---
         try:
             inner_data = response_engine.internal_state_stats()
             inner_energy = ft.Text(f"Energy: {inner_data['energy']}", size=12, color=ft.Colors.CYAN_300)
@@ -235,7 +235,7 @@ def main(page: ft.Page):
             inner_tension = ft.Text("", size=12)
             inner_irrit = ft.Text("", size=12)
 
-        # --- Emotions (V0.6) ---
+        # --- Emotions ---
         try:
             emo = response_engine.emotion_stats()
             shown = {k: v for k, v in emo.items() if v != 0}
@@ -250,7 +250,7 @@ def main(page: ft.Page):
         except Exception as emo_ex:
             emo_lines = [ft.Text(f"Emotions unavailable: {emo_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Identity (V0.7) ---
+        # --- Identity ---
         try:
             beliefs = response_engine.identity_stats()
             if beliefs:
@@ -267,7 +267,7 @@ def main(page: ft.Page):
         except Exception as ident_ex:
             identity_lines = [ft.Text(f"Identity unavailable: {ident_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Social (V0.8) ---
+        # --- Social ---
         try:
             social = response_engine.social_stats()
             if social:
@@ -292,7 +292,7 @@ def main(page: ft.Page):
         except Exception as social_ex:
             social_lines = [ft.Text(f"Social unavailable: {social_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Reflection (V0.9) ---
+        # --- Reflection ---
         try:
             refl_counts = response_engine.reflection_stats()
             refl_recent = response_engine.reflections_recent()
@@ -312,7 +312,7 @@ def main(page: ft.Page):
         except Exception as refl_ex:
             reflection_lines = [ft.Text(f"Reflection unavailable: {refl_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Motivation (V1.0) ---
+        # --- Motivation ---
         try:
             drives = response_engine.drives_stats()
             if drives:
@@ -326,7 +326,7 @@ def main(page: ft.Page):
         except Exception as mot_ex:
             motivation_lines = [ft.Text(f"Motivation unavailable: {mot_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Cognition (V1.2) ---
+        # --- Cognition ---
         try:
             trace = response_engine.cognition_trace()
             if trace:
@@ -358,7 +358,7 @@ def main(page: ft.Page):
         except Exception as cog_ex:
             cognition_lines = [ft.Text(f"Cognition unavailable: {cog_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Learning (V1.3) ---
+        # --- Learning ---
         try:
             learning_lines = []
 
@@ -405,7 +405,7 @@ def main(page: ft.Page):
         except Exception as learn_ex:
             learning_lines = [ft.Text(f"Learning unavailable: {learn_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Personality (V1.4) ---
+        # --- Personality ---
         try:
             traits = response_engine.personality_stats()
             if traits:
@@ -418,7 +418,7 @@ def main(page: ft.Page):
         except Exception as pers_ex:
             personality_lines = [ft.Text(f"Personality unavailable: {pers_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Evolution (V1.5) ---
+        # --- Evolution ---
         try:
             evolution_lines = []
 
@@ -450,7 +450,7 @@ def main(page: ft.Page):
         except Exception as evo_ex:
             evolution_lines = [ft.Text(f"Evolution unavailable: {evo_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Web (V1.7) ---
+        # --- Web ---
         try:
             web_stats = response_engine.web_stats()
             web_lines = [
@@ -476,7 +476,6 @@ def main(page: ft.Page):
             web_lines = [ft.Text(f"Web unavailable: {wex}",
                                  size=12, color=ft.Colors.RED_300)]
 
-        # Manual learn from URL
         web_url_field = ft.TextField(
             label="URL",
             hint_text="https://en.wikipedia.org/wiki/...",
@@ -532,7 +531,6 @@ def main(page: ft.Page):
 
             integration_lines.append(ft.Text(f"Pinecone: {pc_text}", size=12, color=pc_color))
 
-            # ▼▼▼ DEBUG LINES ▼▼▼
             dbg = pinecone.get("debug", "no debug field")
             integration_lines.append(
                 ft.Text(f"debug: {dbg}", size=10, color=ft.Colors.GREY_500, selectable=True)
@@ -542,7 +540,6 @@ def main(page: ft.Page):
                 integration_lines.append(
                     ft.Text(f"error: {err}", size=10, color=ft.Colors.RED_300, selectable=True)
                 )
-            # ▲▲▲ END DEBUG ▲▲▲
 
             cloud = int_stats.get("cloud", {})
             backup_count = cloud.get("backup_count", 0)
@@ -629,18 +626,15 @@ def main(page: ft.Page):
                 show_snack(f"❌ Wipe failed: {ex}")
             page.update()
 
-        # --- Dialog ---
         settings_dialog = ft.AlertDialog(
             title=ft.Text("⚙️ Settings"),
             content=ft.Column(
                 [
-                    # --- Account ---
                     ft.Text("👤 Account", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     name_field, phone_field, email_field,
                     ft.ElevatedButton("🔐 Sign in with Google", disabled=True, width=340),
                     ft.Divider(),
 
-                    # --- Brain ---
                     ft.Text("🧠 Brain", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     model_name_label,
                     ft.ElevatedButton("Choose Model File", icon=ft.Icons.UPLOAD_FILE,
@@ -648,82 +642,66 @@ def main(page: ft.Page):
                     context_field, threads_field,
                     ft.Divider(),
 
-                    # --- Memory ---
                     ft.Text("💭 Memory", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     mem_episodes, mem_facts, mem_msgs, mem_trust, mem_fam, mem_resp, mem_att,
                     ft.Divider(),
 
-                    # --- Childhood ---
                     ft.Text("🧸 Childhood", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
                     *childhood_lines,
                     ft.Divider(),
 
-                    # --- Internal State ---
                     ft.Text("🧬 Internal State", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_300),
                     inner_energy, inner_warmth, inner_tension, inner_irrit,
                     ft.Divider(),
 
-                    # --- Emotions ---
                     ft.Text("❤️ Emotions", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PURPLE_200),
                     *emo_lines,
                     ft.Divider(),
 
-                    # --- Identity ---
                     ft.Text("🪞 Identity", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.AMBER_200),
                     *identity_lines,
                     ft.Divider(),
 
-                    # --- Social ---
                     ft.Text("🧑 Social", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_GREEN_200),
                     *social_lines,
                     ft.Divider(),
 
-                    # --- Reflection ---
                     ft.Text("🪷 Reflection", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.TEAL_200),
                     *reflection_lines,
                     ft.Divider(),
 
-                    # --- Motivation ---
                     ft.Text("🎯 Motivation", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
                     *motivation_lines,
                     ft.Divider(),
 
-                    # --- Cognition ---
                     ft.Text("🧠 Cognition", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_200),
                     *cognition_lines,
                     ft.Divider(),
 
-                    # --- Learning ---
                     ft.Text("🎓 Learning", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIME_200),
                     *learning_lines,
                     ft.Divider(),
 
-                    # --- Personality ---
                     ft.Text("🎭 Personality", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_200),
                     *personality_lines,
                     ft.Divider(),
 
-                    # --- Evolution ---
                     ft.Text("🌱 Evolution", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_200),
                     *evolution_lines,
                     ft.Divider(),
 
-                    # --- Web (V1.7) ---
                     ft.Text("🌐 Web", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_BLUE_200),
                     *web_lines,
                     ft.Divider(),
 
-                    # --- Integrations ---
                     ft.Text("🔗 Integrations", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     *integration_lines,
                     ft.Divider(),
 
-                    # --- Wipe ---
                     ft.ElevatedButton("Wipe All Memory", icon=ft.Icons.DELETE_FOREVER,
                                       on_click=do_wipe_memory, width=340),
                     ft.Divider(),
 
-                    # --- Backup ---
                     ft.Text("💾 Backup", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     backup_label,
                     ft.Row([
@@ -767,6 +745,50 @@ def main(page: ft.Page):
         add_message("Ruby", reply)
 
     # ----------------------------------------
+    # V1.8 — WebSocket bridge to Lemur extension
+    # ----------------------------------------
+    async def ws_handler(msg):
+        platform = msg.get("platform", "unknown")
+        content = msg.get("content", "")
+        url = msg.get("url", "")
+        if not content:
+            return {"ok": False, "extra": {"reason": "empty"}}
+        try:
+            # Route: for now, everything goes through web knowledge as a raw learning text.
+            # Real per-platform routing comes in a later version.
+            from web import WebLearning, KnowledgeIngestion
+            wl = WebLearning()
+            ki = KnowledgeIngestion()
+            title = f"{platform}: {url[:60]}" if url else platform
+            learned = wl.process(title, content, url or "extension://{}".format(platform))
+            res = ki.ingest(learned)
+            return {"ok": True, "extra": {"platform": platform, "new": res.get("is_new")}}
+        except Exception as e:
+            print(f"ws_handler ingest error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    ws_server = WSServer(handler=ws_handler)
+
+    def _on_connect(n):
+        ws_status.value = f"🔌 Extension connected ({n})"
+        ws_status.color = ft.Colors.GREEN_400
+        page.update()
+
+    def _on_disconnect(n):
+        ws_status.value = "🔌 Extension: not connected"
+        ws_status.color = ft.Colors.GREY_500
+        page.update()
+
+    def _on_message(platform, n_chars):
+        ws_status.value = f"📨 Got {n_chars} chars from {platform}"
+        ws_status.color = ft.Colors.CYAN_400
+        page.update()
+
+    ws_server.on_connect = _on_connect
+    ws_server.on_disconnect = _on_disconnect
+    ws_server.on_message = _on_message
+
+    # ----------------------------------------
     # Layout
     # ----------------------------------------
     message_box = ft.TextField(
@@ -792,6 +814,7 @@ def main(page: ft.Page):
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         ),
         status,
+        ws_status,
         ft.Divider(),
         chat,
         ft.Row(controls=[message_box, send_button]),
@@ -806,6 +829,9 @@ def main(page: ft.Page):
     else:
         status.value = "🧠 No model selected. Tap ⚙️ to choose one."
         page.update()
+
+    # Start the WebSocket server as an asyncio task
+    page.run_task(ws_server.serve)
 
 
 if __name__ == "__main__":
