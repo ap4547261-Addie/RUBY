@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import asyncio
 import flet as ft
 
 from brain.local_brain import LocalBrain
@@ -95,21 +96,26 @@ def main(page: ft.Page):
             return original_path
 
     # ----------------------------------------
-    # Model Loading
+    # Model Loading (thread-safe)
     # ----------------------------------------
     def load_model(path, name):
-        status.value = f"🧠 Loading {name}..."
-        page.update()
+        try:
+            status.value = f"🧠 Loading {name}..."
+            page.update()
 
-        stable_path = get_stable_model_path(path, name)
-        success = brain.load_model(stable_path)
+            stable_path = get_stable_model_path(path, name)
+            success = brain.load_model(stable_path)
 
-        if success:
-            status.value = f"🧠 {name} loaded. Ruby is awake!"
-            settings.set("model_path", stable_path)
-            settings.set("model_name", name)
-        else:
-            status.value = f"❌ Failed to load {name}"
+            if success:
+                status.value = f"🧠 {name} loaded. Ruby is awake!"
+                settings.set("model_path", stable_path)
+                settings.set("model_name", name)
+            else:
+                status.value = f"❌ Failed to load {name}"
+            page.update()
+        except Exception as e:
+            print(f"❌ load_model error: {e}")
+            status.value = f"❌ {e}"
             page.update()
 
     # ----------------------------------------
@@ -140,25 +146,16 @@ def main(page: ft.Page):
 
     # ----------------------------------------
     # V1.8 — WebSocket bridge to Lemur extension
-    # (defined here so open_settings can read live status)
     # ----------------------------------------
     async def ws_handler(msg):
         platform = msg.get("platform", "unknown")
         content = msg.get("content", "")
         url = msg.get("url", "")
-        if not content:
-            return {"ok": False, "extra": {"reason": "empty"}}
-        try:
-            from web import WebLearning, KnowledgeIngestion
-            wl = WebLearning()
-            ki = KnowledgeIngestion()
-            title = f"{platform}: {url[:60]}" if url else platform
-            learned = wl.process(title, content, url or "extension://{}".format(platform))
-            res = ki.ingest(learned)
-            return {"ok": True, "extra": {"platform": platform, "new": res.get("is_new")}}
-        except Exception as e:
-            print(f"ws_handler ingest error: {e}")
-            return {"ok": False, "error": str(e)}
+        result = response_engine.ingest_extension_content(platform, url, content)
+        return {
+            "ok": result.get("ok", False),
+            "extra": {"platform": platform, "new": result.get("is_new")},
+        }
 
     ws_server = WSServer(handler=ws_handler)
 
@@ -619,7 +616,6 @@ def main(page: ft.Page):
                 ft.Text("Instagram: Not connected", size=12, color=ft.Colors.GREY_400)
             )
 
-            # Lemur extension bridge live status
             ws_conn = ws_server.client_count()
             if ws_conn > 0:
                 bridge_text = f"✅ Lemur extension ({ws_conn})"
@@ -845,15 +841,26 @@ def main(page: ft.Page):
     load_chat_history()
     page.update()
 
+    # ----------------------------------------
+    # V1.8 — Start WS server FIRST, then load model in background
+    # ----------------------------------------
+    page.run_task(ws_server.serve)
+
     if settings.has_model():
         print(f"📂 Auto-loading: {settings.get('model_name')}")
-        load_model(settings.get("model_path"), settings.get("model_name"))
+
+        async def _auto_load_model():
+            path = settings.get("model_path")
+            name = settings.get("model_name")
+            try:
+                await asyncio.to_thread(load_model, path, name)
+            except Exception as e:
+                print(f"❌ Auto-load failed: {e}")
+
+        page.run_task(_auto_load_model)
     else:
         status.value = "🧠 No model selected. Tap ⚙️ to choose one."
         page.update()
-
-    # Start the WebSocket server as an asyncio task
-    page.run_task(ws_server.serve)
 
 
 if __name__ == "__main__":
