@@ -1,10 +1,9 @@
 # web/browser.py — Fetch a URL and return clean text.
-# V1.7 — uses requests + stdlib HTMLParser (no extra deps yet).
 
 import re
 import requests
 from html.parser import HTMLParser
-from typing import Dict, Optional
+from typing import Dict
 
 
 USER_AGENT = (
@@ -13,7 +12,7 @@ USER_AGENT = (
 )
 
 TIMEOUT = 15
-MAX_TEXT = 20000  # hard cap on returned text
+MAX_TEXT = 20000
 
 
 class _TextExtractor(HTMLParser):
@@ -58,7 +57,6 @@ class _TextExtractor(HTMLParser):
 
     def text(self) -> str:
         raw = "".join(self.parts)
-        # collapse whitespace, keep paragraph breaks
         raw = re.sub(r"[ \t\r\f\v]+", " ", raw)
         raw = re.sub(r"\n\s*\n+", "\n\n", raw)
         return raw.strip()
@@ -76,7 +74,6 @@ class Browser:
         self.timeout = timeout
 
     def fetch(self, url: str) -> Dict:
-        """Fetch URL. Returns {ok, url, title, text, error}."""
         if not url or not url.startswith(("http://", "https://")):
             return {"ok": False, "url": url, "title": "", "text": "",
                     "error": "invalid url"}
@@ -95,10 +92,9 @@ class Browser:
             return {"ok": False, "url": url, "title": "", "text": "",
                     "error": f"http {r.status_code}"}
 
-        ctype = r.headers.get("Content-Type", "")
-        if "html" not in ctype.lower() and "xml" not in ctype.lower():
-            # plain text? return as-is
-            if "text/" in ctype.lower():
+        ctype = r.headers.get("Content-Type", "").lower()
+        if "html" not in ctype and "xml" not in ctype:
+            if "text/" in ctype:
                 return {"ok": True, "url": r.url, "title": "",
                         "text": r.text[:MAX_TEXT], "error": None}
             return {"ok": False, "url": url, "title": "", "text": "",
@@ -124,12 +120,10 @@ class Browser:
         }
 
 
-# quick self-test
 if __name__ == "__main__":
     b = Browser()
-    for u in ["https://en.wikipedia.org/wiki/Artificial_intelligence"]:
-        r = b.fetch(u)
-        print("ok:", r["ok"], "| title:", r["title"])
-        print("error:", r["error"])
-        print("text length:", len(r["text"]))
-        print(r["text"][:300])
+    r = b.fetch("https://en.wikipedia.org/wiki/Artificial_intelligence")
+    print("ok:", r["ok"], "| title:", r["title"])
+    print("error:", r["error"])
+    print("text length:", len(r["text"]))
+    print(r["text"][:300])
