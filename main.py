@@ -139,6 +139,49 @@ def main(page: ft.Page):
     page.overlay.append(file_picker)
 
     # ----------------------------------------
+    # V1.8 — WebSocket bridge to Lemur extension
+    # (defined here so open_settings can read live status)
+    # ----------------------------------------
+    async def ws_handler(msg):
+        platform = msg.get("platform", "unknown")
+        content = msg.get("content", "")
+        url = msg.get("url", "")
+        if not content:
+            return {"ok": False, "extra": {"reason": "empty"}}
+        try:
+            from web import WebLearning, KnowledgeIngestion
+            wl = WebLearning()
+            ki = KnowledgeIngestion()
+            title = f"{platform}: {url[:60]}" if url else platform
+            learned = wl.process(title, content, url or "extension://{}".format(platform))
+            res = ki.ingest(learned)
+            return {"ok": True, "extra": {"platform": platform, "new": res.get("is_new")}}
+        except Exception as e:
+            print(f"ws_handler ingest error: {e}")
+            return {"ok": False, "error": str(e)}
+
+    ws_server = WSServer(handler=ws_handler)
+
+    def _on_connect(n):
+        ws_status.value = f"🔌 Extension connected ({n})"
+        ws_status.color = ft.Colors.GREEN_400
+        page.update()
+
+    def _on_disconnect(n):
+        ws_status.value = "🔌 Extension: not connected"
+        ws_status.color = ft.Colors.GREY_500
+        page.update()
+
+    def _on_message(platform, n_chars):
+        ws_status.value = f"📨 Got {n_chars} chars from {platform}"
+        ws_status.color = ft.Colors.CYAN_400
+        page.update()
+
+    ws_server.on_connect = _on_connect
+    ws_server.on_disconnect = _on_disconnect
+    ws_server.on_message = _on_message
+
+    # ----------------------------------------
     # Settings Dialog
     # ----------------------------------------
     def open_settings(e):
@@ -450,10 +493,21 @@ def main(page: ft.Page):
         except Exception as evo_ex:
             evolution_lines = [ft.Text(f"Evolution unavailable: {evo_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Web ---
+        # --- Web (with live extension status) ---
         try:
             web_stats = response_engine.web_stats()
+
+            ext_count = ws_server.client_count()
+            if ext_count > 0:
+                ext_text = f"✅ Connected ({ext_count} client{'s' if ext_count > 1 else ''})"
+                ext_color = ft.Colors.GREEN_400
+            else:
+                ext_text = "⏸ Not connected"
+                ext_color = ft.Colors.GREY_500
+
             web_lines = [
+                ft.Text(f"🔌 Extension: {ext_text}",
+                        size=12, color=ext_color),
                 ft.Text(f"📄 Pages learned: {web_stats.get('total_pages', 0)}",
                         size=12, color=ft.Colors.LIGHT_BLUE_200),
                 ft.Text(f"🌐 Unique sources: {web_stats.get('unique_sources', 0)}",
@@ -509,7 +563,7 @@ def main(page: ft.Page):
                               on_click=do_learn_url, width=340)
         )
 
-        # --- Integrations ---
+        # --- Integrations (with live bridge status) ---
         try:
             integration_lines = []
             int_stats = response_engine.integration_stats()
@@ -563,6 +617,18 @@ def main(page: ft.Page):
             ))
             integration_lines.append(
                 ft.Text("Instagram: Not connected", size=12, color=ft.Colors.GREY_400)
+            )
+
+            # Lemur extension bridge live status
+            ws_conn = ws_server.client_count()
+            if ws_conn > 0:
+                bridge_text = f"✅ Lemur extension ({ws_conn})"
+                bridge_color = ft.Colors.GREEN_200
+            else:
+                bridge_text = "⏸ Lemur extension"
+                bridge_color = ft.Colors.GREY_400
+            integration_lines.append(
+                ft.Text(f"Bridge: {bridge_text}", size=12, color=bridge_color)
             )
         except Exception as int_ex:
             integration_lines = [
@@ -743,50 +809,6 @@ def main(page: ft.Page):
 
         status.value = "🧠 Ruby is ready."
         add_message("Ruby", reply)
-
-    # ----------------------------------------
-    # V1.8 — WebSocket bridge to Lemur extension
-    # ----------------------------------------
-    async def ws_handler(msg):
-        platform = msg.get("platform", "unknown")
-        content = msg.get("content", "")
-        url = msg.get("url", "")
-        if not content:
-            return {"ok": False, "extra": {"reason": "empty"}}
-        try:
-            # Route: for now, everything goes through web knowledge as a raw learning text.
-            # Real per-platform routing comes in a later version.
-            from web import WebLearning, KnowledgeIngestion
-            wl = WebLearning()
-            ki = KnowledgeIngestion()
-            title = f"{platform}: {url[:60]}" if url else platform
-            learned = wl.process(title, content, url or "extension://{}".format(platform))
-            res = ki.ingest(learned)
-            return {"ok": True, "extra": {"platform": platform, "new": res.get("is_new")}}
-        except Exception as e:
-            print(f"ws_handler ingest error: {e}")
-            return {"ok": False, "error": str(e)}
-
-    ws_server = WSServer(handler=ws_handler)
-
-    def _on_connect(n):
-        ws_status.value = f"🔌 Extension connected ({n})"
-        ws_status.color = ft.Colors.GREEN_400
-        page.update()
-
-    def _on_disconnect(n):
-        ws_status.value = "🔌 Extension: not connected"
-        ws_status.color = ft.Colors.GREY_500
-        page.update()
-
-    def _on_message(platform, n_chars):
-        ws_status.value = f"📨 Got {n_chars} chars from {platform}"
-        ws_status.color = ft.Colors.CYAN_400
-        page.update()
-
-    ws_server.on_connect = _on_connect
-    ws_server.on_disconnect = _on_disconnect
-    ws_server.on_message = _on_message
 
     # ----------------------------------------
     # Layout
