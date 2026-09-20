@@ -18,6 +18,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      # CRITICAL FIX: Install Flutter SDK manually
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: 'stable'
+          cache: true
+
       - name: Install exact Flet version
         run: |
           pip install flet==0.24.0
