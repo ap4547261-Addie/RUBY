@@ -1,106 +1,8 @@
-# main.py - Ruby V1.6 (Flet 1.0 compatible)
+# main.py - Ruby V1.6 (Flet 0.26.0)
 
 import os
 import shutil
 import flet as ft
-
-
-# ============================================================
-# FLET COMPATIBILITY LAYER
-# ============================================================
-
-_ALIASES = {
-    "ElevatedButton": "Button",
-    "FilledButton": "Button",
-    "FilledTonalButton": "Button",
-}
-
-for _old, _new in _ALIASES.items():
-    if not hasattr(ft, _old) and hasattr(ft, _new):
-        setattr(ft, _old, getattr(ft, _new))
-
-
-def _make_page_open():
-    def _page_open(self, dialog):
-        for mname in ("show_dialog", "open_dialog"):
-            m = getattr(self, mname, None)
-
-            if callable(m):
-                try:
-                    m(dialog)
-                    return
-                except Exception as e:
-                    print(f"⚠️ {mname} failed: {e}")
-
-        registered = False
-
-        try:
-            if hasattr(self, "services"):
-                if dialog not in self.services:
-                    self.services.append(dialog)
-                registered = True
-        except Exception as e:
-            print(f"⚠️ services append failed: {e}")
-
-        if not registered and hasattr(self, "overlay"):
-            try:
-                if dialog not in self.overlay:
-                    self.overlay.append(dialog)
-            except Exception as e:
-                print(f"⚠️ overlay append failed: {e}")
-
-        try:
-            dialog.open = True
-            self.update()
-        except Exception as e:
-            print(f"⚠️ page.open legacy failed: {e}")
-
-    return _page_open
-
-
-def _make_page_close():
-    def _page_close(self, dialog=None):
-        for mname in ("pop_dialog", "close_dialog"):
-            m = getattr(self, mname, None)
-
-            if callable(m):
-                try:
-                    try:
-                        m(dialog)
-                    except TypeError:
-                        m()
-                    return
-                except Exception as e:
-                    print(f"⚠️ {mname} failed: {e}")
-
-        try:
-            if dialog is not None:
-                dialog.open = False
-
-            self.update()
-
-        except Exception as e:
-            print(f"⚠️ page.close legacy failed: {e}")
-
-    return _page_close
-
-
-if not hasattr(ft.Page, "open"):
-    ft.Page.open = _make_page_open()
-
-if not hasattr(ft.Page, "close"):
-    ft.Page.close = _make_page_close()
-
-if not hasattr(ft.Page, "open_dialog"):
-    ft.Page.open_dialog = ft.Page.open
-
-if not hasattr(ft.Page, "close_dialog"):
-    ft.Page.close_dialog = ft.Page.close
-
-
-# ============================================================
-# RUBY IMPORTS
-# ============================================================
 
 from brain.local_brain import LocalBrain
 from brain.response_engine import ResponseEngine
@@ -108,12 +10,7 @@ from prompts.ruby_prompt import RUBY_PROMPT
 from settings.settings_manager import SettingsManager
 
 
-# ============================================================
-# MAIN
-# ============================================================
-
 def main(page: ft.Page):
-
     page.title = "Ruby"
     page.padding = 10
     page.theme_mode = ft.ThemeMode.DARK
@@ -123,7 +20,6 @@ def main(page: ft.Page):
     settings = SettingsManager()
 
     user_name = settings.get("user_name", "not_set")
-
     response_engine = ResponseEngine(
         brain,
         user_name=user_name,
@@ -142,29 +38,10 @@ def main(page: ft.Page):
         size=12,
     )
 
-
-    # ========================================================
-    # FILE PICKER
-    #
-    # Flet 1.0:
-    # FilePicker is a service.
-    # We keep a reference and await pick_files().
-    # ========================================================
-
-    file_picker = ft.FilePicker()
-
-
-    # ========================================================
-    # BASIC UI HELPERS
-    # ========================================================
+    file_picker_mode = {"action": None}
 
     def add_message(sender, message, is_user=False):
-
-        color = (
-            ft.Colors.CYAN_400
-            if is_user
-            else ft.Colors.PINK_400
-        )
+        color = ft.Colors.CYAN_400 if is_user else ft.Colors.PINK_400
 
         chat.controls.append(
             ft.Text(
@@ -177,33 +54,19 @@ def main(page: ft.Page):
 
         page.update()
 
-
     def show_snack(text):
-
-        page.snack_bar = ft.SnackBar(
-            ft.Text(text)
-        )
-
+        page.snack_bar = ft.SnackBar(ft.Text(text))
         page.snack_bar.open = True
         page.update()
 
-
-    # ========================================================
-    # CHAT HISTORY
-    # ========================================================
-
     def load_chat_history():
-
         try:
-
             from memory.episodic_memory import EpisodicMemory
 
             ep = EpisodicMemory()
-
             rows = ep.get_recent(limit=200)
 
             for user_msg, ruby_reply, _ts in reversed(rows):
-
                 chat.controls.append(
                     ft.Text(
                         f"You: {user_msg}",
@@ -223,37 +86,16 @@ def main(page: ft.Page):
                 )
 
             if rows:
-                print(
-                    f"📜 Restored {len(rows)} past exchanges."
-                )
+                print(f"📜 Restored {len(rows)} past exchanges.")
 
         except Exception as ex:
-
-            print(
-                f"⚠️ Could not load chat history: {ex}"
-            )
-
-
-    # ========================================================
-    # MODEL STORAGE
-    # ========================================================
+            print(f"⚠️ Could not load chat history: {ex}")
 
     def get_stable_model_path(original_path, original_name):
+        storage_dir = os.getenv("FLET_APP_STORAGE_DATA", ".")
+        stable_dir = os.path.join(storage_dir, "models")
 
-        storage_dir = os.getenv(
-            "FLET_APP_STORAGE_DATA",
-            ".",
-        )
-
-        stable_dir = os.path.join(
-            storage_dir,
-            "models",
-        )
-
-        os.makedirs(
-            stable_dir,
-            exist_ok=True,
-        )
+        os.makedirs(stable_dir, exist_ok=True)
 
         stable_path = os.path.join(
             stable_dir,
@@ -261,13 +103,8 @@ def main(page: ft.Page):
         )
 
         try:
-
-            if (
-                os.path.abspath(original_path)
-                == os.path.abspath(stable_path)
-            ):
+            if os.path.abspath(original_path) == os.path.abspath(stable_path):
                 return stable_path
-
         except Exception:
             pass
 
@@ -275,219 +112,84 @@ def main(page: ft.Page):
             return stable_path
 
         try:
-
             print(
                 f"📦 Copying model to permanent storage: "
                 f"{stable_path}"
             )
 
-            shutil.copy(
-                original_path,
-                stable_path,
-            )
+            shutil.copy(original_path, stable_path)
 
             print("✅ Model copied.")
 
             return stable_path
 
         except Exception as e:
-
             print(
                 f"⚠️ Copy failed, using original path: {e}"
             )
 
             return original_path
 
-
     def load_model(path, name):
-
         status.value = f"🧠 Loading {name}..."
         page.update()
 
-        stable_path = get_stable_model_path(
-            path,
-            name,
-        )
+        stable_path = get_stable_model_path(path, name)
 
-        success = brain.load_model(
-            stable_path
-        )
+        success = brain.load_model(stable_path)
 
         if success:
-
             status.value = (
                 f"🧠 {name} loaded. Ruby is awake!"
             )
 
-            settings.set(
-                "model_path",
-                stable_path,
-            )
-
-            settings.set(
-                "model_name",
-                name,
-            )
+            settings.set("model_path", stable_path)
+            settings.set("model_name", name)
 
         else:
-
-            status.value = (
-                f"❌ Failed to load {name}"
-            )
+            status.value = f"❌ Failed to load {name}"
 
         page.update()
 
+    def handle_file_pick(e: ft.FilePickerResultEvent):
+        if not e.files:
+            return
 
-    # ========================================================
-    # NEW FLET 1.0 FILE PICKER
-    # ========================================================
+        f = e.files[0]
 
-    async def pick_model_file(ev=None):
-
-        try:
-
-            print("📂 Opening model file picker...")
-
-            files = await file_picker.pick_files(
-                allow_multiple=False,
-                file_type=ft.FilePickerFileType.ANY,
-            )
-
-            if not files:
-
-                print(
-                    "📂 Model selection cancelled."
-                )
-
-                return
-
-            selected = files[0]
-
-            print(
-                f"📂 Selected model: {selected.name}"
-            )
-
-            print(
-                f"📍 Model path: {selected.path}"
-            )
-
-            if not selected.path:
-
-                status.value = (
-                    "❌ Selected file has no path."
-                )
-
-                page.update()
-
-                return
-
-            load_model(
-                selected.path,
-                selected.name,
-            )
-
-        except Exception as ex:
-
-            print(
-                f"❌ File picker failed: "
-                f"{type(ex).__name__}: {ex}"
-            )
-
-            status.value = (
-                f"❌ File picker error: {ex}"
-            )
-
+        if not f.path:
+            status.value = "❌ No file path provided."
             page.update()
+            return
 
+        action = file_picker_mode.get("action")
 
-    # ========================================================
-    # BACKUP IMPORT PICKER
-    # ========================================================
+        if action == "model":
+            load_model(f.path, f.name)
 
-    async def pick_backup_file(ev=None):
-
-        try:
-
-            print("📂 Opening backup picker...")
-
-            files = await file_picker.pick_files(
-                allow_multiple=False,
-                file_type=ft.FilePickerFileType.ANY,
-            )
-
-            if not files:
-
-                print(
-                    "📂 Backup selection cancelled."
-                )
-
-                return
-
-            selected = files[0]
-
-            print(
-                f"📂 Selected backup: {selected.name}"
-            )
-
-            print(
-                f"📍 Backup path: {selected.path}"
-            )
-
-            if not selected.path:
-
-                show_snack(
-                    "❌ Selected file has no path."
-                )
-
-                return
-
-            ok = settings.import_backup(
-                selected.path
-            )
+        elif action == "import_backup":
+            ok = settings.import_backup(f.path)
 
             if ok:
-
                 show_snack(
-                    "✅ Backup imported. "
-                    "Restart the app to apply."
+                    "✅ Backup imported. Restart the app to apply."
                 )
-
             else:
+                show_snack("❌ Backup import failed.")
 
-                show_snack(
-                    "❌ Backup import failed."
-                )
+        file_picker_mode["action"] = None
 
-        except Exception as ex:
+    # Flet 0.26.0 FilePicker
+    file_picker = ft.FilePicker(
+        on_result=handle_file_pick
+    )
 
-            print(
-                f"❌ Backup picker failed: "
-                f"{type(ex).__name__}: {ex}"
-            )
-
-            show_snack(
-                f"❌ Backup picker error: {ex}"
-            )
-
-        page.update()
-
-
-    # ========================================================
-    # SETTINGS
-    # ========================================================
+    page.overlay.append(file_picker)
 
     def open_settings(e):
-
-        # ----------------------------------------------------
-        # ACCOUNT
-        # ----------------------------------------------------
-
         name_field = ft.TextField(
             label="Name",
-            value=settings.get(
-                "user_name",
-                "",
-            ),
+            value=settings.get("user_name", ""),
             bgcolor="#18181C",
             color=ft.Colors.WHITE,
             border_color="#3A3A46",
@@ -495,10 +197,7 @@ def main(page: ft.Page):
 
         phone_field = ft.TextField(
             label="Phone Number",
-            value=settings.get(
-                "user_phone",
-                "",
-            ),
+            value=settings.get("user_phone", ""),
             keyboard_type=ft.KeyboardType.PHONE,
             bgcolor="#18181C",
             color=ft.Colors.WHITE,
@@ -507,36 +206,22 @@ def main(page: ft.Page):
 
         email_field = ft.TextField(
             label="Email",
-            value=settings.get(
-                "user_email",
-                "",
-            ),
+            value=settings.get("user_email", ""),
             keyboard_type=ft.KeyboardType.EMAIL,
             bgcolor="#18181C",
             color=ft.Colors.WHITE,
             border_color="#3A3A46",
         )
 
-
-        # ----------------------------------------------------
-        # MODEL
-        # ----------------------------------------------------
-
         model_name_label = ft.Text(
-            settings.get("model_name")
-            or "No model selected",
+            settings.get("model_name") or "No model selected",
             size=13,
             color=ft.Colors.GREY_400,
         )
 
         context_field = ft.TextField(
             label="Context Size",
-            value=str(
-                settings.get(
-                    "context_size",
-                    1024,
-                )
-            ),
+            value=str(settings.get("context_size", 1024)),
             keyboard_type=ft.KeyboardType.NUMBER,
             bgcolor="#18181C",
             color=ft.Colors.WHITE,
@@ -545,27 +230,14 @@ def main(page: ft.Page):
 
         threads_field = ft.TextField(
             label="Threads",
-            value=str(
-                settings.get(
-                    "threads",
-                    4,
-                )
-            ),
+            value=str(settings.get("threads", 4)),
             keyboard_type=ft.KeyboardType.NUMBER,
             bgcolor="#18181C",
             color=ft.Colors.WHITE,
             border_color="#3A3A46",
         )
 
-
-        # ----------------------------------------------------
-        # BACKUP
-        # ----------------------------------------------------
-
-        last_backup = (
-            settings.get("last_backup")
-            or "Never"
-        )
+        last_backup = settings.get("last_backup") or "Never"
 
         backup_label = ft.Text(
             f"Last backup: {last_backup}",
@@ -573,13 +245,8 @@ def main(page: ft.Page):
             color=ft.Colors.GREY_400,
         )
 
-
-        # ====================================================
-        # MEMORY
-        # ====================================================
-
+        # Memory
         try:
-
             stats = response_engine.memory_stats()
 
             rel = stats["relationship"]
@@ -627,7 +294,6 @@ def main(page: ft.Page):
             )
 
         except Exception as ex:
-
             mem_episodes = ft.Text(
                 f"Memory unavailable: {ex}",
                 size=12,
@@ -641,23 +307,14 @@ def main(page: ft.Page):
             mem_resp = ft.Text("", size=12)
             mem_att = ft.Text("", size=12)
 
-
-        # ====================================================
-        # CHILDHOOD
-        # ====================================================
-
+        # Childhood
         try:
-
-            childhood_mems = (
-                response_engine.childhood_stats()
-            )
+            childhood_mems = response_engine.childhood_stats()
 
             if childhood_mems:
-
                 childhood_lines = []
 
                 for m in childhood_mems:
-
                     childhood_lines.append(
                         ft.Text(
                             f"🧸 [age {m['age']}] "
@@ -678,7 +335,6 @@ def main(page: ft.Page):
                     )
 
             else:
-
                 childhood_lines = [
                     ft.Text(
                         "No childhood memories.",
@@ -688,7 +344,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as ch_ex:
-
             childhood_lines = [
                 ft.Text(
                     f"Childhood unavailable: {ch_ex}",
@@ -697,16 +352,9 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # INTERNAL STATE
-        # ====================================================
-
+        # Internal State
         try:
-
-            inner_data = (
-                response_engine.internal_state_stats()
-            )
+            inner_data = response_engine.internal_state_stats()
 
             inner_energy = ft.Text(
                 f"Energy: {inner_data['energy']}",
@@ -733,7 +381,6 @@ def main(page: ft.Page):
             )
 
         except Exception as inner_ex:
-
             inner_energy = ft.Text(
                 f"State unavailable: {inner_ex}",
                 size=12,
@@ -744,13 +391,8 @@ def main(page: ft.Page):
             inner_tension = ft.Text("", size=12)
             inner_irrit = ft.Text("", size=12)
 
-
-        # ====================================================
-        # EMOTIONS
-        # ====================================================
-
+        # Emotions
         try:
-
             emo = response_engine.emotion_stats()
 
             shown = {
@@ -760,7 +402,6 @@ def main(page: ft.Page):
             }
 
             if shown:
-
                 sorted_emo = sorted(
                     shown.items(),
                     key=lambda x: -abs(x[1]),
@@ -776,7 +417,6 @@ def main(page: ft.Page):
                 ]
 
             else:
-
                 emo_lines = [
                     ft.Text(
                         "No active emotions yet.",
@@ -786,7 +426,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as emo_ex:
-
             emo_lines = [
                 ft.Text(
                     f"Emotions unavailable: {emo_ex}",
@@ -795,17 +434,11 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # IDENTITY
-        # ====================================================
-
+        # Identity
         try:
-
             beliefs = response_engine.identity_stats()
 
             if beliefs:
-
                 identity_lines = [
                     ft.Text(
                         f"• [{b['category']}] "
@@ -819,7 +452,6 @@ def main(page: ft.Page):
                 ]
 
             else:
-
                 identity_lines = [
                     ft.Text(
                         "No beliefs yet.",
@@ -829,7 +461,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as ident_ex:
-
             identity_lines = [
                 ft.Text(
                     f"Identity unavailable: {ident_ex}",
@@ -838,78 +469,60 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # SOCIAL
-        # ====================================================
-
+        # Social
         try:
-
             social = response_engine.social_stats()
 
             if social:
-
                 social_lines = [
-
                     ft.Text(
                         f"Subject: {social['subject']}",
                         size=12,
                         color=ft.Colors.LIGHT_GREEN_200,
                     ),
-
                     ft.Text(
                         f"Relationship: "
                         f"{social['relationship_type']}",
                         size=12,
                         color=ft.Colors.LIGHT_GREEN_200,
                     ),
-
                     ft.Text(
                         f"Interactions: "
                         f"{social['total_interactions']}",
                         size=12,
                         color=ft.Colors.LIGHT_GREEN_200,
                     ),
-
                     ft.Text(
                         f"Trust: {social['trust']}",
                         size=12,
                         color=ft.Colors.LIGHT_GREEN_200,
                     ),
-
                     ft.Text(
-                        f"Familiarity: "
-                        f"{social['familiarity']}",
+                        f"Familiarity: {social['familiarity']}",
                         size=12,
                         color=ft.Colors.LIGHT_GREEN_200,
                     ),
-
                     ft.Text(
-                        f"Attachment: "
-                        f"{social['attachment']}",
+                        f"Attachment: {social['attachment']}",
                         size=12,
                         color=ft.Colors.LIGHT_GREEN_200,
                     ),
-
                     ft.Text(
                         f"Respect: {social['respect']}",
                         size=12,
                         color=ft.Colors.LIGHT_GREEN_200,
                     ),
-
                     ft.Text(
                         f"Perceived state: "
                         f"{social['perceived_emotional_state']}",
                         size=12,
                         color=ft.Colors.LIGHT_GREEN_200,
                     ),
-
                     ft.Text(
                         f"First seen: {social['first_seen']}",
                         size=11,
                         color=ft.Colors.GREY_500,
                     ),
-
                     ft.Text(
                         f"Last seen: {social['last_seen']}",
                         size=11,
@@ -918,7 +531,6 @@ def main(page: ft.Page):
                 ]
 
                 if social.get("notes"):
-
                     social_lines.append(
                         ft.Text(
                             f"Notes: {social['notes']}",
@@ -928,7 +540,6 @@ def main(page: ft.Page):
                     )
 
             else:
-
                 social_lines = [
                     ft.Text(
                         "No social model yet.",
@@ -938,7 +549,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as social_ex:
-
             social_lines = [
                 ft.Text(
                     f"Social unavailable: {social_ex}",
@@ -947,37 +557,24 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # REFLECTION
-        # ====================================================
-
+        # Reflection
         try:
-
-            refl_counts = (
-                response_engine.reflection_stats()
-            )
-
-            refl_recent = (
-                response_engine.reflections_recent()
-            )
+            refl_counts = response_engine.reflection_stats()
+            refl_recent = response_engine.reflections_recent()
 
             reflection_lines = [
-
                 ft.Text(
                     f"Self-reflections: "
                     f"{refl_counts['self_reflections']}",
                     size=12,
                     color=ft.Colors.TEAL_200,
                 ),
-
                 ft.Text(
                     f"Experience reviews: "
                     f"{refl_counts['experience_reviews']}",
                     size=12,
                     color=ft.Colors.TEAL_200,
                 ),
-
                 ft.Text(
                     f"Long-term reflections: "
                     f"{refl_counts['long_term_reflections']}",
@@ -987,13 +584,11 @@ def main(page: ft.Page):
             ]
 
             if refl_recent:
-
                 reflection_lines.append(
                     ft.Divider(height=1)
                 )
 
                 for ts, kind, summary in refl_recent:
-
                     reflection_lines.append(
                         ft.Text(
                             f"[{kind}] {summary}",
@@ -1003,7 +598,6 @@ def main(page: ft.Page):
                     )
 
             else:
-
                 reflection_lines.append(
                     ft.Text(
                         "No reflections yet.",
@@ -1013,7 +607,6 @@ def main(page: ft.Page):
                 )
 
         except Exception as refl_ex:
-
             reflection_lines = [
                 ft.Text(
                     f"Reflection unavailable: {refl_ex}",
@@ -1022,17 +615,11 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # MOTIVATION
-        # ====================================================
-
+        # Motivation
         try:
-
             drives = response_engine.drives_stats()
 
             if drives:
-
                 sorted_drives = sorted(
                     drives.items(),
                     key=lambda x: -x[1],
@@ -1048,7 +635,6 @@ def main(page: ft.Page):
                 ]
 
             else:
-
                 motivation_lines = [
                     ft.Text(
                         "No drives yet.",
@@ -1058,7 +644,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as mot_ex:
-
             motivation_lines = [
                 ft.Text(
                     f"Motivation unavailable: {mot_ex}",
@@ -1067,43 +652,42 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # COGNITION
-        # ====================================================
-
+        # Cognition
         try:
-
             trace = response_engine.cognition_trace()
 
             if trace:
-
                 cognition_lines = [
-
                     ft.Text(
-                        f"Focus: "
-                        f"{', '.join(k for k in trace.get('focused_on', {}))}",
+                        "Focus: "
+                        + ", ".join(
+                            k for k in trace.get(
+                                "focused_on",
+                                {},
+                            )
+                        ),
                         size=11,
                         color=ft.Colors.BLUE_200,
                     ),
-
                     ft.Text(
                         f"Appraisal: "
-                        f"threat {round(trace.get('appraisal', {}).get('threat', 0), 2)}, "
-                        f"openness {round(trace.get('appraisal', {}).get('openness_required', 0), 2)}, "
-                        f"importance {round(trace.get('appraisal', {}).get('importance', 0), 2)}, "
-                        f"honesty {round(trace.get('appraisal', {}).get('perceived_honesty', 0), 2)}",
+                        f"threat "
+                        f"{round(trace.get('appraisal', {}).get('threat', 0), 2)}, "
+                        f"openness "
+                        f"{round(trace.get('appraisal', {}).get('openness_required', 0), 2)}, "
+                        f"importance "
+                        f"{round(trace.get('appraisal', {}).get('importance', 0), 2)}, "
+                        f"honesty "
+                        f"{round(trace.get('appraisal', {}).get('perceived_honesty', 0), 2)}",
                         size=11,
                         color=ft.Colors.BLUE_200,
                     ),
-
                     ft.Text(
-                        f"Anticipation: "
+                        "Anticipation: "
                         f"{trace.get('prediction', {}).get('ready_for', '—')}",
                         size=11,
                         color=ft.Colors.BLUE_200,
                     ),
-
                     ft.Text(
                         f"Decision: "
                         f"intent={trace.get('decision', {}).get('intent', '—')}, "
@@ -1115,7 +699,6 @@ def main(page: ft.Page):
                 ]
 
             else:
-
                 cognition_lines = [
                     ft.Text(
                         "No cognition trace yet.",
@@ -1125,7 +708,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as cog_ex:
-
             cognition_lines = [
                 ft.Text(
                     f"Cognition unavailable: {cog_ex}",
@@ -1134,23 +716,14 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # LEARNING
-        # ====================================================
-
+        # Learning
         try:
-
             learning_lines = []
 
-            err_summary = (
-                response_engine.learning_summary()
-            )
+            err_summary = response_engine.learning_summary()
 
             if err_summary:
-
                 for direction, count in err_summary.items():
-
                     learning_lines.append(
                         ft.Text(
                             f"Errors — {direction}: {count}",
@@ -1158,9 +731,7 @@ def main(page: ft.Page):
                             color=ft.Colors.LIME_200,
                         )
                     )
-
             else:
-
                 learning_lines.append(
                     ft.Text(
                         "No prediction errors yet.",
@@ -1176,7 +747,6 @@ def main(page: ft.Page):
             )
 
             if recent_errors:
-
                 learning_lines.append(
                     ft.Divider(height=1)
                 )
@@ -1188,7 +758,6 @@ def main(page: ft.Page):
                     mag,
                     direction,
                 ) in recent_errors:
-
                     learning_lines.append(
                         ft.Text(
                             f"[{direction}] "
@@ -1200,18 +769,14 @@ def main(page: ft.Page):
                         )
                     )
 
-            prefs = (
-                response_engine.preference_stats()
-            )
+            prefs = response_engine.preference_stats()
 
             if prefs:
-
                 learning_lines.append(
                     ft.Divider(height=1)
                 )
 
                 for topic, feeling, seen in prefs[:8]:
-
                     learning_lines.append(
                         ft.Text(
                             f"• {topic}: "
@@ -1222,29 +787,20 @@ def main(page: ft.Page):
                         )
                     )
 
-            best = (
-                response_engine.best_behaviors(
-                    limit=3
-                )
+            best = response_engine.best_behaviors(
+                limit=3
             )
 
             if best:
-
                 learning_lines.append(
                     ft.Divider(height=1)
                 )
 
-                for (
-                    intent,
-                    tone,
-                    score,
-                    used,
-                ) in best:
-
+                for intent, tone, score, used in best:
                     learning_lines.append(
                         ft.Text(
-                            f"Best: {intent}/{tone} "
-                            f"— score {round(score, 2)} "
+                            f"Best: {intent}/{tone} — "
+                            f"score {round(score, 2)} "
                             f"(used {used})",
                             size=11,
                             color=ft.Colors.LIME_200,
@@ -1252,7 +808,6 @@ def main(page: ft.Page):
                     )
 
             if not learning_lines:
-
                 learning_lines = [
                     ft.Text(
                         "Nothing learned yet.",
@@ -1262,7 +817,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as learn_ex:
-
             learning_lines = [
                 ft.Text(
                     f"Learning unavailable: {learn_ex}",
@@ -1271,19 +825,11 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # PERSONALITY
-        # ====================================================
-
+        # Personality
         try:
-
-            traits = (
-                response_engine.personality_stats()
-            )
+            traits = response_engine.personality_stats()
 
             if traits:
-
                 personality_lines = [
                     ft.Text(
                         f"{k}: {v}",
@@ -1297,7 +843,6 @@ def main(page: ft.Page):
                 ]
 
             else:
-
                 personality_lines = [
                     ft.Text(
                         "No traits yet.",
@@ -1307,7 +852,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as pers_ex:
-
             personality_lines = [
                 ft.Text(
                     f"Personality unavailable: {pers_ex}",
@@ -1316,21 +860,13 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # EVOLUTION
-        # ====================================================
-
+        # Evolution
         try:
-
             evolution_lines = []
 
-            values = (
-                response_engine.values_stats()
-            )
+            values = response_engine.values_stats()
 
             if values:
-
                 evolution_lines.append(
                     ft.Text(
                         "— Values —",
@@ -1343,7 +879,6 @@ def main(page: ft.Page):
                     values.items(),
                     key=lambda x: -x[1],
                 ):
-
                     evolution_lines.append(
                         ft.Text(
                             f"{k}: {v}",
@@ -1352,14 +887,11 @@ def main(page: ft.Page):
                         )
                     )
 
-            vhistory = (
-                response_engine.value_history(
-                    limit=5
-                )
+            vhistory = response_engine.value_history(
+                limit=5
             )
 
             if vhistory:
-
                 evolution_lines.append(
                     ft.Divider(height=1)
                 )
@@ -1378,12 +910,7 @@ def main(page: ft.Page):
                     reason,
                     ts,
                 ) in vhistory:
-
-                    sign = (
-                        "+"
-                        if delta >= 0
-                        else ""
-                    )
+                    sign = "+" if delta >= 0 else ""
 
                     evolution_lines.append(
                         ft.Text(
@@ -1396,7 +923,6 @@ def main(page: ft.Page):
                     )
 
             if not evolution_lines:
-
                 evolution_lines = [
                     ft.Text(
                         "Nothing evolved yet.",
@@ -1406,7 +932,6 @@ def main(page: ft.Page):
                 ]
 
         except Exception as evo_ex:
-
             evolution_lines = [
                 ft.Text(
                     f"Evolution unavailable: {evo_ex}",
@@ -1415,23 +940,11 @@ def main(page: ft.Page):
                 )
             ]
 
-
-        # ====================================================
-        # INTEGRATIONS
-        # ====================================================
-
+        # Integrations
         try:
-
             integration_lines = []
 
-            int_stats = (
-                response_engine.integration_stats()
-            )
-
-            print(
-                "🔎 RUBY INTEGRATION STATUS:",
-                int_stats,
-            )
+            int_stats = response_engine.integration_stats()
 
             pinecone = int_stats.get(
                 "pinecone",
@@ -1444,31 +957,15 @@ def main(page: ft.Page):
             )
 
             if pc_status == "connected":
-
                 pc_text = (
                     f"✅ Connected — "
-                    f"{pinecone.get('total_vectors', 0)} vectors"
+                    f"{pinecone.get('total_vectors', 0)} "
+                    f"vectors"
                 )
 
                 pc_color = ft.Colors.GREEN_200
 
-            elif pc_status == "error":
-
-                pc_text = (
-                    "⚠️ Error connecting"
-                )
-
-                pc_color = ft.Colors.RED_300
-
-                if pinecone.get("message"):
-
-                    print(
-                        "❌ Pinecone:",
-                        pinecone.get("message"),
-                    )
-
             elif pc_status == "disabled":
-
                 pc_text = (
                     "⏸ Not configured "
                     "(SQLite only)"
@@ -1476,14 +973,13 @@ def main(page: ft.Page):
 
                 pc_color = ft.Colors.GREY_400
 
+            elif pc_status == "error":
+                pc_text = "⚠️ Error connecting"
+                pc_color = ft.Colors.RED_300
+
             else:
-
-                pc_text = (
-                    f"Status: {pc_status}"
-                )
-
+                pc_text = f"Status: {pc_status}"
                 pc_color = ft.Colors.GREY_400
-
 
             integration_lines.append(
                 ft.Text(
@@ -1492,7 +988,6 @@ def main(page: ft.Page):
                     color=pc_color,
                 )
             )
-
 
             cloud = int_stats.get(
                 "cloud",
@@ -1512,47 +1007,23 @@ def main(page: ft.Page):
                 )
             )
 
-
-            # ----------------------------------------------
-            # DATABASE BACKUP
-            # ----------------------------------------------
-
             def do_backup(ev):
-
                 try:
-
-                    if not response_engine.integrations:
-
-                        show_snack(
-                            "❌ Integrations unavailable."
-                        )
-
-                        return
-
-                    path = (
-                        response_engine.integrations.backup()
-                    )
+                    path = response_engine.integrations.backup()
 
                     if path:
-
                         show_snack(
                             f"💾 Backed up: {path}"
                         )
-
                     else:
-
                         show_snack(
                             "⚠️ Backup failed"
                         )
 
                 except Exception as be:
-
-                    show_snack(
-                        f"❌ {be}"
-                    )
+                    show_snack(f"❌ {be}")
 
                 page.update()
-
 
             integration_lines.append(
                 ft.ElevatedButton(
@@ -1563,7 +1034,6 @@ def main(page: ft.Page):
                 )
             )
 
-
             integration_lines.append(
                 ft.Text(
                     "Instagram: Not connected",
@@ -1572,13 +1042,7 @@ def main(page: ft.Page):
                 )
             )
 
-
         except Exception as int_ex:
-
-            print(
-                f"❌ Integrations UI failed: {int_ex}"
-            )
-
             integration_lines = [
                 ft.Text(
                     f"Integrations unavailable: {int_ex}",
@@ -1587,157 +1051,105 @@ def main(page: ft.Page):
                 )
             ]
 
+        def pick_model(ev):
+            settings_dialog.open = False
+            page.update()
 
-        # ====================================================
-        # BUTTON HANDLERS
-        # ====================================================
+            file_picker_mode["action"] = "model"
 
-        async def pick_model(ev):
-
-            page.close(
-                settings_dialog
+            file_picker.pick_files(
+                allow_multiple=False,
+                file_type=ft.FilePickerFileType.ANY,
             )
 
-            await pick_model_file()
-
-
         def save_and_close(ev):
-
             try:
-
                 ctx = int(
-                    context_field.value
-                    or 1024
+                    context_field.value or 1024
                 )
 
                 thr = int(
-                    threads_field.value
-                    or 4
+                    threads_field.value or 4
                 )
 
             except ValueError:
-
                 ctx = 1024
                 thr = 4
 
-
             settings.update(
                 {
-                    "user_name":
+                    "user_name": (
                         name_field.value.strip()
-                        or "not_set",
-
-                    "user_phone":
-                        phone_field.value.strip(),
-
-                    "user_email":
-                        email_field.value.strip(),
-
-                    "context_size":
-                        ctx,
-
-                    "threads":
-                        thr,
+                        or "not_set"
+                    ),
+                    "user_phone": (
+                        phone_field.value.strip()
+                    ),
+                    "user_email": (
+                        email_field.value.strip()
+                    ),
+                    "context_size": ctx,
+                    "threads": thr,
                 }
             )
-
 
             status.value = (
                 "✅ Settings saved. "
                 "Restart to apply name change."
             )
 
-            page.close(
-                settings_dialog
-            )
-
+            settings_dialog.open = False
             page.update()
 
-
         def do_export(ev):
-
-            path = (
-                settings.export_backup()
-            )
+            path = settings.export_backup()
 
             if path:
-
                 backup_label.value = (
                     f"✅ Saved: {path}"
                 )
 
                 show_snack(
-                    "✅ Backup exported "
-                    "to Downloads/ruby_backups/"
+                    "✅ Backup exported to "
+                    "Downloads/ruby_backups/"
                 )
 
             else:
-
                 backup_label.value = (
                     "❌ Export failed"
                 )
 
             page.update()
 
+        def do_import(ev):
+            settings_dialog.open = False
+            page.update()
 
-        async def do_import(ev):
-
-            page.close(
-                settings_dialog
+            file_picker_mode["action"] = (
+                "import_backup"
             )
 
-            await pick_backup_file()
-
+            file_picker.pick_files(
+                allow_multiple=False,
+                file_type=ft.FilePickerFileType.ANY,
+            )
 
         def do_wipe_memory(ev):
-
             try:
-
                 response_engine.wipe_all_memory()
 
-                mem_episodes.value = (
-                    "Episodes: 0"
-                )
+                mem_episodes.value = "Episodes: 0"
+                mem_facts.value = "Facts: 0"
+                mem_msgs.value = "Messages: 0"
+                mem_trust.value = "Trust: 0"
+                mem_fam.value = "Familiarity: 0"
+                mem_resp.value = "Respect: 0"
+                mem_att.value = "Attachment: 0"
 
-                mem_facts.value = (
-                    "Facts: 0"
-                )
-
-                mem_msgs.value = (
-                    "Messages: 0"
-                )
-
-                mem_trust.value = (
-                    "Trust: 0"
-                )
-
-                mem_fam.value = (
-                    "Familiarity: 0"
-                )
-
-                mem_resp.value = (
-                    "Respect: 0"
-                )
-
-                mem_att.value = (
-                    "Attachment: 0"
-                )
-
-                inner_energy.value = (
-                    "Energy: 0.0"
-                )
-
-                inner_warmth.value = (
-                    "Warmth: 0.0"
-                )
-
-                inner_tension.value = (
-                    "Tension: 0.0"
-                )
-
-                inner_irrit.value = (
-                    "Irritation: 0.0"
-                )
+                inner_energy.value = "Energy: 0.0"
+                inner_warmth.value = "Warmth: 0.0"
+                inner_tension.value = "Tension: 0.0"
+                inner_irrit.value = "Irritation: 0.0"
 
                 chat.controls.clear()
 
@@ -1746,32 +1158,17 @@ def main(page: ft.Page):
                 )
 
             except Exception as ex:
-
                 show_snack(
                     f"❌ Wipe failed: {ex}"
                 )
 
             page.update()
 
-
-        # ====================================================
-        # SETTINGS DIALOG
-        # ====================================================
-
         settings_dialog = ft.AlertDialog(
-
-            title=ft.Text(
-                "⚙️ Settings"
-            ),
+            title=ft.Text("⚙️ Settings"),
 
             content=ft.Column(
-
                 [
-
-                    # ----------------------------------------
-                    # ACCOUNT
-                    # ----------------------------------------
-
                     ft.Text(
                         "👤 Account",
                         weight=ft.FontWeight.BOLD,
@@ -1790,11 +1187,6 @@ def main(page: ft.Page):
                     ),
 
                     ft.Divider(),
-
-
-                    # ----------------------------------------
-                    # BRAIN
-                    # ----------------------------------------
 
                     ft.Text(
                         "🧠 Brain",
@@ -1817,11 +1209,6 @@ def main(page: ft.Page):
 
                     ft.Divider(),
 
-
-                    # ----------------------------------------
-                    # MEMORY
-                    # ----------------------------------------
-
                     ft.Text(
                         "💭 Memory",
                         weight=ft.FontWeight.BOLD,
@@ -1839,11 +1226,6 @@ def main(page: ft.Page):
 
                     ft.Divider(),
 
-
-                    # ----------------------------------------
-                    # CHILDHOOD
-                    # ----------------------------------------
-
                     ft.Text(
                         "🧸 Childhood",
                         weight=ft.FontWeight.BOLD,
@@ -1854,11 +1236,6 @@ def main(page: ft.Page):
                     *childhood_lines,
 
                     ft.Divider(),
-
-
-                    # ----------------------------------------
-                    # INTERNAL STATE
-                    # ----------------------------------------
 
                     ft.Text(
                         "🧬 Internal State",
@@ -1874,11 +1251,6 @@ def main(page: ft.Page):
 
                     ft.Divider(),
 
-
-                    # ----------------------------------------
-                    # EMOTIONS
-                    # ----------------------------------------
-
                     ft.Text(
                         "❤️ Emotions",
                         weight=ft.FontWeight.BOLD,
@@ -1889,11 +1261,6 @@ def main(page: ft.Page):
                     *emo_lines,
 
                     ft.Divider(),
-
-
-                    # ----------------------------------------
-                    # IDENTITY
-                    # ----------------------------------------
 
                     ft.Text(
                         "🪞 Identity",
@@ -1906,11 +1273,6 @@ def main(page: ft.Page):
 
                     ft.Divider(),
 
-
-                    # ----------------------------------------
-                    # SOCIAL
-                    # ----------------------------------------
-
                     ft.Text(
                         "🧑 Social",
                         weight=ft.FontWeight.BOLD,
@@ -1921,11 +1283,6 @@ def main(page: ft.Page):
                     *social_lines,
 
                     ft.Divider(),
-
-
-                    # ----------------------------------------
-                    # REFLECTION
-                    # ----------------------------------------
 
                     ft.Text(
                         "🪷 Reflection",
@@ -1938,11 +1295,6 @@ def main(page: ft.Page):
 
                     ft.Divider(),
 
-
-                    # ----------------------------------------
-                    # MOTIVATION
-                    # ----------------------------------------
-
                     ft.Text(
                         "🎯 Motivation",
                         weight=ft.FontWeight.BOLD,
@@ -1953,11 +1305,6 @@ def main(page: ft.Page):
                     *motivation_lines,
 
                     ft.Divider(),
-
-
-                    # ----------------------------------------
-                    # COGNITION
-                    # ----------------------------------------
 
                     ft.Text(
                         "🧠 Cognition",
@@ -1970,11 +1317,6 @@ def main(page: ft.Page):
 
                     ft.Divider(),
 
-
-                    # ----------------------------------------
-                    # LEARNING
-                    # ----------------------------------------
-
                     ft.Text(
                         "🎓 Learning",
                         weight=ft.FontWeight.BOLD,
@@ -1985,11 +1327,6 @@ def main(page: ft.Page):
                     *learning_lines,
 
                     ft.Divider(),
-
-
-                    # ----------------------------------------
-                    # PERSONALITY
-                    # ----------------------------------------
 
                     ft.Text(
                         "🎭 Personality",
@@ -2002,11 +1339,6 @@ def main(page: ft.Page):
 
                     ft.Divider(),
 
-
-                    # ----------------------------------------
-                    # EVOLUTION
-                    # ----------------------------------------
-
                     ft.Text(
                         "🌱 Evolution",
                         weight=ft.FontWeight.BOLD,
@@ -2017,11 +1349,6 @@ def main(page: ft.Page):
                     *evolution_lines,
 
                     ft.Divider(),
-
-
-                    # ----------------------------------------
-                    # INTEGRATIONS
-                    # ----------------------------------------
 
                     ft.Text(
                         "🔗 Integrations",
@@ -2034,11 +1361,6 @@ def main(page: ft.Page):
 
                     ft.Divider(),
 
-
-                    # ----------------------------------------
-                    # WIPE
-                    # ----------------------------------------
-
                     ft.ElevatedButton(
                         "Wipe All Memory",
                         icon=ft.Icons.DELETE_FOREVER,
@@ -2047,11 +1369,6 @@ def main(page: ft.Page):
                     ),
 
                     ft.Divider(),
-
-
-                    # ----------------------------------------
-                    # SETTINGS BACKUP
-                    # ----------------------------------------
 
                     ft.Text(
                         "💾 Settings Backup",
@@ -2069,20 +1386,15 @@ def main(page: ft.Page):
                                 icon=ft.Icons.DOWNLOAD,
                                 on_click=do_export,
                             ),
-
                             ft.ElevatedButton(
                                 "Import",
                                 icon=ft.Icons.UPLOAD,
                                 on_click=do_import,
                             ),
                         ],
-
-                        alignment=(
-                            ft.MainAxisAlignment.START
-                        ),
+                        alignment=ft.MainAxisAlignment.START,
                     ),
                 ],
-
                 tight=True,
                 spacing=10,
                 width=360,
@@ -2090,34 +1402,37 @@ def main(page: ft.Page):
             ),
 
             actions=[
-
                 ft.TextButton(
                     "Save",
                     on_click=save_and_close,
                 ),
-
                 ft.TextButton(
                     "Close",
-                    on_click=lambda ev:
-                        page.close(settings_dialog),
+                    on_click=lambda ev: close_settings(),
                 ),
             ],
         )
 
-        page.open(
-            settings_dialog
-        )
+        def close_settings():
+            settings_dialog.open = False
+            page.update()
 
+        settings_dialog.actions = [
+            ft.TextButton(
+                "Save",
+                on_click=save_and_close,
+            ),
+            ft.TextButton(
+                "Close",
+                on_click=lambda ev: close_settings(),
+            ),
+        ]
 
-    # ========================================================
-    # SEND MESSAGE
-    # ========================================================
+        settings_dialog.open = True
+        page.update()
 
     def send_message(e):
-
-        msg = (
-            message_box.value.strip()
-        )
+        msg = message_box.value.strip()
 
         if not msg:
             return
@@ -2131,126 +1446,70 @@ def main(page: ft.Page):
         )
 
         if not brain.is_loaded():
-
             add_message(
                 "Ruby",
                 "Load my brain first 😭 (⚙️)",
             )
-
             return
 
-        status.value = (
-            "💭 Ruby is thinking..."
-        )
-
+        status.value = "💭 Ruby is thinking..."
         page.update()
 
         try:
-
             reply = response_engine.respond(
                 msg,
                 RUBY_PROMPT,
             )
 
         except Exception as ex:
-
-            reply = (
-                f"⚠️ error: {ex}"
-            )
-
+            reply = f"⚠️ error: {ex}"
             print(
                 f"❌ respond error: {ex}"
             )
 
-        status.value = (
-            "🧠 Ruby is ready."
-        )
+        status.value = "🧠 Ruby is ready."
 
         add_message(
             "Ruby",
             reply,
         )
 
-
-    # ========================================================
-    # CHAT INPUT
-    # ========================================================
-
     message_box = ft.TextField(
-
         hint_text="Talk to Ruby...",
-
         expand=True,
-
         multiline=False,
-
         on_submit=send_message,
-
         bgcolor="#18181C",
-
         color=ft.Colors.WHITE,
-
         border_color="#3A3A46",
-
-        focused_border_color=(
-            ft.Colors.PINK_400
-        ),
+        focused_border_color=ft.Colors.PINK_400,
     )
 
-
-    # ========================================================
-    # SETTINGS BUTTON
-    # ========================================================
-
     settings_button = ft.IconButton(
-
         icon=ft.Icons.SETTINGS,
-
         on_click=open_settings,
-
         icon_color=ft.Colors.GREY_400,
-
         tooltip="Settings",
     )
 
-
-    # ========================================================
-    # SEND BUTTON
-    # ========================================================
-
     send_button = ft.IconButton(
-
         icon=ft.Icons.SEND,
-
         on_click=send_message,
-
         icon_color=ft.Colors.PINK_400,
     )
 
-
-    # ========================================================
-    # PAGE
-    # ========================================================
-
     page.add(
-
         ft.Row(
-
             controls=[
-
                 ft.Text(
                     "Ruby",
                     size=30,
                     weight=ft.FontWeight.BOLD,
                     color=ft.Colors.PINK_400,
                 ),
-
                 settings_button,
             ],
-
-            alignment=(
-                ft.MainAxisAlignment.SPACE_BETWEEN
-            ),
+            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         ),
 
         status,
@@ -2267,22 +1526,10 @@ def main(page: ft.Page):
         ),
     )
 
-
-    # ========================================================
-    # STARTUP
-    # ========================================================
-
     load_chat_history()
-
     page.update()
 
-
-    # ========================================================
-    # AUTO LOAD MODEL
-    # ========================================================
-
     if settings.has_model():
-
         print(
             f"📂 Auto-loading: "
             f"{settings.get('model_name')}"
@@ -2294,7 +1541,6 @@ def main(page: ft.Page):
         )
 
     else:
-
         status.value = (
             "🧠 No model selected. "
             "Tap ⚙️ to choose one."
@@ -2303,16 +1549,5 @@ def main(page: ft.Page):
         page.update()
 
 
-# ============================================================
-# APP START
-# ============================================================
-
 if __name__ == "__main__":
-
-    try:
-
-        ft.run(main)
-
-    except AttributeError:
-
-        ft.app(target=main)
+    ft.app(target=main)
