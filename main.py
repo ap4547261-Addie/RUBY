@@ -708,4 +708,17 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main)  # --- FLET 0.26: ft.app() was removed ---
+    def _safe_main(page: ft.Page):
+        try:
+            main(page)
+        except Exception as _e:
+            import traceback
+            page.bgcolor = "#101014"
+            page.add(
+                ft.Text("❌ RUBY CRASHED AT STARTUP", color="red", size=18, weight="bold"),
+                ft.Text(f"{type(_e).__name__}: {_e}", color="orange", size=13, selectable=True),
+                ft.Divider(),
+                ft.Text(traceback.format_exc(), color="white", size=11, selectable=True),
+            )
+            page.update()
+    ft.run(_safe_main)
