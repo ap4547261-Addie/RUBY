@@ -1,12 +1,12 @@
 # main.py - Ruby V1.6 (Flet 0.26.0 compatible)
 
 import os
-import asyncio  # --- FLET 0.26 ---
+import asyncio  # ← Flet 0.26
 import shutil
 import flet as ft
 
 # ============================================================
-# FLET 1.0 COMPATIBILITY LAYER (harmless on 0.26, will activate on 1.0)
+# FLET 1.0 COMPATIBILITY LAYER (harmless on 0.26)
 # ============================================================
 _ALIASES = {
     "ElevatedButton": "Button",
@@ -193,7 +193,7 @@ def main(page: ft.Page):
         page.services.append(file_picker)
     except AttributeError:
         page.overlay.append(file_picker)
-    page.update()  # --- FLET 0.26: required so the native picker is initialized ---
+    page.update()  # ← Flet 0.26
 
     def open_settings(e):
         name_field = ft.TextField(
@@ -230,7 +230,7 @@ def main(page: ft.Page):
         last_backup = settings.get("last_backup") or "Never"
         backup_label = ft.Text(f"Last backup: {last_backup}", size=12, color=ft.Colors.GREY_400)
 
-        # Memory
+        # --- Memory ---
         try:
             stats = response_engine.memory_stats()
             rel = stats["relationship"]
@@ -247,7 +247,7 @@ def main(page: ft.Page):
             mem_trust = ft.Text("", size=12); mem_fam = ft.Text("", size=12)
             mem_resp = ft.Text("", size=12); mem_att = ft.Text("", size=12)
 
-        # Childhood
+        # --- Childhood ---
         try:
             childhood_mems = response_engine.childhood_stats()
             if childhood_mems:
@@ -267,7 +267,7 @@ def main(page: ft.Page):
         except Exception as ch_ex:
             childhood_lines = [ft.Text(f"Childhood unavailable: {ch_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Internal State
+        # --- Internal State ---
         try:
             inner_data = response_engine.internal_state_stats()
             inner_energy = ft.Text(f"Energy: {inner_data['energy']}", size=12, color=ft.Colors.CYAN_300)
@@ -279,7 +279,7 @@ def main(page: ft.Page):
             inner_warmth = ft.Text("", size=12); inner_tension = ft.Text("", size=12)
             inner_irrit = ft.Text("", size=12)
 
-        # Emotions
+        # --- Emotions ---
         try:
             emo = response_engine.emotion_stats()
             shown = {k: v for k, v in emo.items() if v != 0}
@@ -291,7 +291,7 @@ def main(page: ft.Page):
         except Exception as emo_ex:
             emo_lines = [ft.Text(f"Emotions unavailable: {emo_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Identity
+        # --- Identity ---
         try:
             beliefs = response_engine.identity_stats()
             if beliefs:
@@ -306,7 +306,7 @@ def main(page: ft.Page):
         except Exception as ident_ex:
             identity_lines = [ft.Text(f"Identity unavailable: {ident_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Social
+        # --- Social ---
         try:
             social = response_engine.social_stats()
             if social:
@@ -329,7 +329,7 @@ def main(page: ft.Page):
         except Exception as social_ex:
             social_lines = [ft.Text(f"Social unavailable: {social_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Reflection
+        # --- Reflection ---
         try:
             refl_counts = response_engine.reflection_stats()
             refl_recent = response_engine.reflections_recent()
@@ -347,7 +347,7 @@ def main(page: ft.Page):
         except Exception as refl_ex:
             reflection_lines = [ft.Text(f"Reflection unavailable: {refl_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Motivation
+        # --- Motivation ---
         try:
             drives = response_engine.drives_stats()
             if drives:
@@ -358,7 +358,7 @@ def main(page: ft.Page):
         except Exception as mot_ex:
             motivation_lines = [ft.Text(f"Motivation unavailable: {mot_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Cognition
+        # --- Cognition ---
         try:
             trace = response_engine.cognition_trace()
             if trace:
@@ -382,7 +382,7 @@ def main(page: ft.Page):
         except Exception as cog_ex:
             cognition_lines = [ft.Text(f"Cognition unavailable: {cog_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Learning
+        # --- Learning ---
         try:
             learning_lines = []
             err_summary = response_engine.learning_summary()
@@ -419,7 +419,7 @@ def main(page: ft.Page):
         except Exception as learn_ex:
             learning_lines = [ft.Text(f"Learning unavailable: {learn_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Personality
+        # --- Personality ---
         try:
             traits = response_engine.personality_stats()
             if traits:
@@ -430,7 +430,7 @@ def main(page: ft.Page):
         except Exception as pers_ex:
             personality_lines = [ft.Text(f"Personality unavailable: {pers_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Evolution
+        # --- Evolution ---
         try:
             evolution_lines = []
             values = response_engine.values_stats()
@@ -453,7 +453,7 @@ def main(page: ft.Page):
         except Exception as evo_ex:
             evolution_lines = [ft.Text(f"Evolution unavailable: {evo_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # Integrations
+        # --- Integrations ---
         try:
             integration_lines = []
             int_stats = response_engine.integration_stats()
@@ -497,7 +497,7 @@ def main(page: ft.Page):
         except Exception as int_ex:
             integration_lines = [ft.Text(f"Integrations unavailable: {int_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- FLET 0.26: pick_model now async + await ---
+        # --- Actions ---
         async def pick_model(ev):
             page.close(settings_dialog)
             await asyncio.sleep(0.3)
@@ -530,7 +530,6 @@ def main(page: ft.Page):
                 backup_label.value = "❌ Export failed"
             page.update()
 
-        # --- FLET 0.26: do_import now async + await ---
         async def do_import(ev):
             page.close(settings_dialog)
             await asyncio.sleep(0.3)
@@ -708,17 +707,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    def _safe_main(page: ft.Page):
-        try:
-            main(page)
-        except Exception as _e:
-            import traceback
-            page.bgcolor = "#101014"
-            page.add(
-                ft.Text("❌ RUBY CRASHED AT STARTUP", color="red", size=18, weight="bold"),
-                ft.Text(f"{type(_e).__name__}: {_e}", color="orange", size=13, selectable=True),
-                ft.Divider(),
-                ft.Text(traceback.format_exc(), color="white", size=11, selectable=True),
-            )
-            page.update()
-    ft.run(_safe_main)
+    ft.run(main)  # ← Flet 0.26
