@@ -11,10 +11,10 @@ class LocalBrain:
             print(f"🔄 Loading model from: {model_path}")
             self.model = Llama(
                 model_path=model_path,
-                n_ctx=1024,             # ← changed from 2048
+                n_ctx=4096,             # ← fits the current prompt size
                 n_threads=3,
                 verbose=False,
-                chat_format="chatml",   # ← the actual fix for "..."
+                chat_format="chatml",
             )
             self.model_path = model_path
             print("✅ Model loaded.")
