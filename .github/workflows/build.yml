@@ -1,49 +1,22 @@
 name: Build Ruby APK
-
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+on: [push]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
+      
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # CRITICAL FIX: Install Flutter SDK manually
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.22.0'
-          channel: 'stable'
-          cache: true
-
-      - name: Install exact Flet version
-        run: |
-          pip install flet==0.24.0
-          pip install llama-cpp-python==0.3.32
-
-      - name: Inject secrets into integrations/secrets.py
-        run: |
-          sed -i 's|PLACEHOLDER_API_KEY|${{ secrets.PINECONE_API_KEY }}|' integrations/secrets.py
-          sed -i 's|PLACEHOLDER_INDEX_HOST|${{ secrets.PINECONE_INDEX_HOST }}|' integrations/secrets.py
-          sed -i 's|PLACEHOLDER_INDEX_NAME|${{ secrets.PINECONE_INDEX_NAME }}|' integrations/secrets.py
-          echo "--- secrets.py after injection ---"
-          head -3 integrations/secrets.py
-
-      - name: Clear Flet Build Cache
-        run: rm -rf build/ .flet/
+      - name: Install Flet
+        run: pip install flet
 
       - name: Build APK
-        run: flet build apk
+        run: flet build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
