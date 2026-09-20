@@ -3,7 +3,7 @@ name: Build Ruby APK
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: # Allows you to manually trigger the build
 
 jobs:
   build:
@@ -18,8 +18,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install exact Flet version
+        # CRITICAL FIX: Pin to 0.24.0 to prevent the silent 0.26 upgrade
+        run: |
+          pip install flet==0.24.0
+          pip install llama-cpp-python==0.3.32
 
       - name: Inject secrets into integrations/secrets.py
         run: |
@@ -29,11 +32,15 @@ jobs:
           echo "--- secrets.py after injection ---"
           head -3 integrations/secrets.py
 
+      - name: Clear Flet Build Cache
+        # Ensures GitHub does not reuse the broken 0.26 cached build files
+        run: rm -rf build/ .flet/
+
       - name: Build APK
-        run: flet build apk --yes
+        run: flet build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ruby1-apk
+          name: ruby-apk
           path: build/apk/*.apk
