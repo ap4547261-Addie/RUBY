@@ -200,7 +200,7 @@ def main(page: ft.Page):
             mem_resp = ft.Text("", size=12)
             mem_att = ft.Text("", size=12)
 
-        # --- Childhood (NEW) ---
+        # --- Childhood ---
         try:
             childhood_mems = response_engine.childhood_stats()
             if childhood_mems:
@@ -450,12 +450,13 @@ def main(page: ft.Page):
         except Exception as evo_ex:
             evolution_lines = [ft.Text(f"Evolution unavailable: {evo_ex}", size=12, color=ft.Colors.RED_300)]
 
-        # --- Integrations (V1.6) — NEW ---
+        # --- Integrations ---
         try:
             integration_lines = []
             int_stats = response_engine.integration_stats()
             pinecone = int_stats.get("pinecone", {})
             pc_status = pinecone.get("status", "disabled")
+
             if pc_status == "connected":
                 pc_text = f"✅ Connected — {pinecone.get('total_vectors', 0)} vectors"
                 pc_color = ft.Colors.GREEN_200
@@ -470,6 +471,18 @@ def main(page: ft.Page):
                 pc_color = ft.Colors.GREY_400
 
             integration_lines.append(ft.Text(f"Pinecone: {pc_text}", size=12, color=pc_color))
+
+            # ▼▼▼ DEBUG LINES ▼▼▼
+            dbg = pinecone.get("debug", "no debug field")
+            integration_lines.append(
+                ft.Text(f"debug: {dbg}", size=10, color=ft.Colors.GREY_500, selectable=True)
+            )
+            err = pinecone.get("message", "")
+            if err:
+                integration_lines.append(
+                    ft.Text(f"error: {err}", size=10, color=ft.Colors.RED_300, selectable=True)
+                )
+            # ▲▲▲ END DEBUG ▲▲▲
 
             cloud = int_stats.get("cloud", {})
             backup_count = cloud.get("backup_count", 0)
@@ -495,7 +508,9 @@ def main(page: ft.Page):
                 ft.Text("Instagram: Not connected", size=12, color=ft.Colors.GREY_400)
             )
         except Exception as int_ex:
-            integration_lines = [ft.Text(f"Integrations unavailable: {int_ex}", size=12, color=ft.Colors.RED_300)]
+            integration_lines = [
+                ft.Text(f"Integrations unavailable: {int_ex}", size=12, color=ft.Colors.RED_300)
+            ]
 
         # --- Actions ---
         def pick_model(ev):
@@ -578,7 +593,7 @@ def main(page: ft.Page):
                     mem_episodes, mem_facts, mem_msgs, mem_trust, mem_fam, mem_resp, mem_att,
                     ft.Divider(),
 
-                    # --- Childhood (NEW) ---
+                    # --- Childhood ---
                     ft.Text("🧸 Childhood", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
                     *childhood_lines,
                     ft.Divider(),
@@ -633,7 +648,7 @@ def main(page: ft.Page):
                     *evolution_lines,
                     ft.Divider(),
 
-                    # --- Integrations (NEW) ---
+                    # --- Integrations ---
                     ft.Text("🔗 Integrations", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
                     *integration_lines,
                     ft.Divider(),
