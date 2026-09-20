@@ -11,9 +11,10 @@ class LocalBrain:
             print(f"🔄 Loading model from: {model_path}")
             self.model = Llama(
                 model_path=model_path,
-                n_ctx=2048,
+                n_ctx=1024,             # ← changed from 2048
                 n_threads=3,
                 verbose=False,
+                chat_format="chatml",   # ← the actual fix for "..."
             )
             self.model_path = model_path
             print("✅ Model loaded.")
@@ -26,23 +27,16 @@ class LocalBrain:
     def is_loaded(self) -> bool:
         return self.model is not None
 
-    # -------------------------
-    # Cleanup — fixed so it doesn't delete her name
-    # -------------------------
     def _clean(self, reply: str, user_name: str) -> str:
-        """Strip markdown and role prefixes. Preserve legitimate name replies."""
         reply = reply.replace("**", "").replace("*", "").strip()
 
-        # leading role prefixes
         if reply.lower().startswith("ruby:"):
             reply = reply[5:].strip()
         if reply.lower().startswith(f"{user_name.lower()}:"):
             reply = reply[len(user_name) + 1:].strip()
 
-        # Split into lines, dropping empty ones
         lines = [l for l in reply.split("\n") if l.strip()]
 
-        # ONLY strip the last line if there are other lines AND it's just a name
         if len(lines) > 1:
             last = lines[-1].rstrip(" .-—:").strip().lower()
             if last in ["ruby", "addie", "aditya", user_name.lower()]:
@@ -51,16 +45,12 @@ class LocalBrain:
         else:
             reply = lines[0] if lines else ""
 
-        # Strip dash-signature endings only
         for sig in ["— Ruby", "- Ruby", "– Ruby", "—Ruby", "-Ruby"]:
             if reply.endswith(sig):
                 reply = reply[:-len(sig)].rstrip(" .-—:")
 
         return " ".join(reply.split()).strip()
 
-    # -------------------------
-    # Generate
-    # -------------------------
     def generate(self, description: str, history: list, user_name: str = "not_set") -> str:
         if self.model is None:
             return "My brain isn't loaded yet."
@@ -75,9 +65,9 @@ class LocalBrain:
                 max_tokens=200,
                 temperature=0.9,
                 top_p=0.9,
-                repeat_penalty=1.5,
-                frequency_penalty=0.7,
-                presence_penalty=0.5,
+                repeat_penalty=1.15,
+                frequency_penalty=0.3,
+                presence_penalty=0.2,
                 stop=[
                     f"{user_name}:",
                     "Ruby:",
@@ -88,4 +78,4 @@ class LocalBrain:
             return reply
         except Exception as error:
             print(f"❌ Generation error: {error}")
-            return "..."
+            return f"[GEN ERROR] {type(error).__name__}: {error}"
