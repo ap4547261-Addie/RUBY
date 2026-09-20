@@ -1,3 +1,5 @@
+# brain/response_engine.py — Ruby V1.7
+
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
 from memory.childhood_memory import ChildhoodMemory
@@ -30,6 +32,17 @@ except Exception as e:
     print(f"⚠️ Integrations layer not available: {e}")
     INTEGRATIONS_AVAILABLE = False
     IntegrationEngine = None
+
+# V1.7 — optional
+try:
+    from web import Browser, WebLearning, KnowledgeIngestion
+    WEB_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Web module not available: {e}")
+    WEB_AVAILABLE = False
+    Browser = None
+    WebLearning = None
+    KnowledgeIngestion = None
 
 
 class ResponseEngine:
@@ -71,6 +84,19 @@ class ResponseEngine:
                 self.integrations = None
         else:
             self.integrations = None
+
+        # V1.7
+        if WEB_AVAILABLE:
+            try:
+                self.web_learning = WebLearning()
+                self.web_knowledge = KnowledgeIngestion()
+            except Exception as e:
+                print(f"⚠️ Web init failed: {e}")
+                self.web_learning = None
+                self.web_knowledge = None
+        else:
+            self.web_learning = None
+            self.web_knowledge = None
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
         # V1.3 — evaluate last prediction
@@ -143,6 +169,20 @@ class ResponseEngine:
                     context = f"{context}\n\n{semantic_line}"
             except Exception as e:
                 print(f"⚠️ integrations.build_context failed: {e}")
+
+        # V1.7 — web knowledge
+        if self.web_knowledge:
+            try:
+                web_hits = self.web_knowledge.search(user_message, limit=3)
+                if web_hits:
+                    lines = ["Things you learned from the web:"]
+                    for h in web_hits:
+                        title = (h.get("title") or "")[:80]
+                        summary = (h.get("summary") or "")[:200]
+                        lines.append(f"- {title}: {summary}")
+                    context = f"{context}\n\n" + "\n".join(lines)
+            except Exception as e:
+                print(f"⚠️ web search failed: {e}")
 
         try:
             learning_line = self.learning.describe()
@@ -391,12 +431,21 @@ class ResponseEngine:
                 self.integrations.wipe()
             except Exception:
                 pass
+        # V1.7
+        if self.web_knowledge:
+            try:
+                self.web_knowledge.wipe()
+            except Exception:
+                pass
         try:
             from social.interaction_history import InteractionHistory
             InteractionHistory().wipe()
         except Exception:
             pass
 
+    # ----------------------------------------
+    # Stats / accessors
+    # ----------------------------------------
     def memory_stats(self):
         return self.memory.stats()
 
@@ -471,3 +520,28 @@ class ResponseEngine:
 
     def integration_stats(self):
         return self.integrations.stats() if self.integrations else {}
+
+    # ----------------------------------------
+    # V1.7 — Web
+    # ----------------------------------------
+    def web_stats(self):
+        return self.web_knowledge.stats() if self.web_knowledge else {}
+
+    def web_search(self, query: str, limit: int = 10):
+        return self.web_knowledge.search(query, limit=limit) if self.web_knowledge else []
+
+    def learn_from_url(self, url: str) -> dict:
+        """Fetch a URL, learn from it, store in SQLite. Returns {ok, title, is_new, ...}."""
+        if not self.web_knowledge or not self.web_learning or not Browser:
+            return {"ok": False, "error": "web module unavailable"}
+        try:
+            b = Browser()
+            r = b.fetch(url)
+            if not r.get("ok"):
+                return {"ok": False, "error": r.get("error", "fetch failed")}
+            learned = self.web_learning.process(r["title"], r["text"], r["url"])
+            res = self.web_knowledge.ingest(learned)
+            res["title"] = r["title"]
+            return res
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
