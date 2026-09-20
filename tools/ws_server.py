@@ -8,10 +8,10 @@ from typing import Callable, Optional
 
 
 class WSServer:
-    """Listens on 127.0.0.1:8765. Passes each message to a handler callback."""
+    """Listens on 0.0.0.0:8765. Passes each message to a handler callback."""
 
     def __init__(self, handler: Optional[Callable] = None,
-                 host: str = "127.0.0.1", port: int = 8765):
+                 host: str = "0.0.0.0", port: int = 8765):
         self.handler = handler
         self.host = host
         self.port = port
