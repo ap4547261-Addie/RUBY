@@ -1,4 +1,4 @@
-# main.py - Ruby V1.5 (Memory + State + Emotion + Identity + Social + Reflection + Motivation + Cognition + Learning + Personality + Evolution)
+# main.py - Ruby V1.7 (web learning added)
 
 import os
 import shutil
@@ -450,6 +450,66 @@ def main(page: ft.Page):
         except Exception as evo_ex:
             evolution_lines = [ft.Text(f"Evolution unavailable: {evo_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Web (V1.7) ---
+        try:
+            web_stats = response_engine.web_stats()
+            web_lines = [
+                ft.Text(f"📄 Pages learned: {web_stats.get('total_pages', 0)}",
+                        size=12, color=ft.Colors.LIGHT_BLUE_200),
+                ft.Text(f"🌐 Unique sources: {web_stats.get('unique_sources', 0)}",
+                        size=12, color=ft.Colors.LIGHT_BLUE_200),
+                ft.Text(f"👁️ Total reads: {web_stats.get('total_accesses', 0)}",
+                        size=12, color=ft.Colors.LIGHT_BLUE_200),
+            ]
+            recent_web = response_engine.web_search("", limit=5)
+            if recent_web:
+                web_lines.append(ft.Divider(height=1))
+                for item in recent_web:
+                    web_lines.append(
+                        ft.Text(f"• {(item.get('title') or '')[:60]}",
+                                size=11, color=ft.Colors.CYAN_100)
+                    )
+            else:
+                web_lines.append(ft.Text("Nothing learned yet.",
+                                         size=11, color=ft.Colors.GREY_500))
+        except Exception as wex:
+            web_lines = [ft.Text(f"Web unavailable: {wex}",
+                                 size=12, color=ft.Colors.RED_300)]
+
+        # Manual learn from URL
+        web_url_field = ft.TextField(
+            label="URL",
+            hint_text="https://en.wikipedia.org/wiki/...",
+            bgcolor="#18181C", color=ft.Colors.WHITE,
+            border_color="#3A3A46", width=340,
+        )
+
+        def do_learn_url(ev):
+            url = web_url_field.value.strip()
+            if not url:
+                show_snack("❌ Enter a URL first.")
+                return
+            show_snack("📥 Fetching...")
+            try:
+                result = response_engine.learn_from_url(url)
+                if result.get("ok"):
+                    tag = "new" if result.get("is_new") else "already known"
+                    title = (result.get("title") or "")[:40]
+                    show_snack(f"✅ Learned ({tag}): {title}")
+                    web_url_field.value = ""
+                    page.update()
+                else:
+                    show_snack(f"❌ {result.get('error', 'failed')}")
+            except Exception as ex:
+                show_snack(f"❌ {ex}")
+
+        web_lines.append(ft.Divider(height=1))
+        web_lines.append(web_url_field)
+        web_lines.append(
+            ft.ElevatedButton("Learn from URL", icon=ft.Icons.DOWNLOAD,
+                              on_click=do_learn_url, width=340)
+        )
+
         # --- Integrations ---
         try:
             integration_lines = []
@@ -646,6 +706,11 @@ def main(page: ft.Page):
                     # --- Evolution ---
                     ft.Text("🌱 Evolution", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.CYAN_200),
                     *evolution_lines,
+                    ft.Divider(),
+
+                    # --- Web (V1.7) ---
+                    ft.Text("🌐 Web", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_BLUE_200),
+                    *web_lines,
                     ft.Divider(),
 
                     # --- Integrations ---
