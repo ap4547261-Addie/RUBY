@@ -1,4 +1,4 @@
-# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache)
+# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache + Goals)
 
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
@@ -138,7 +138,7 @@ class ResponseEngine:
             self.story_cache = None
 
     # ============================================================
-    # V1.8 — FAST PATH (System 1 / trivial messages)
+    # V1.8 — FAST PATH
     # ============================================================
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
         try:
@@ -160,17 +160,16 @@ class ResponseEngine:
         return reply
 
     # ============================================================
-    # FULL PATH (System 2) — router-aware context
+    # FULL PATH (System 2) — router-aware
     # ============================================================
     def respond(self, user_message: str, ruby_prompt: str) -> str:
-        # V1.3 — evaluate last prediction
         try:
             self.learning.pre_turn(user_message)
         except Exception as e:
             print(f"⚠️ learning.pre_turn failed: {e}")
 
         # --------------------------------------------------------
-        # V1.9 — build retrieval plan
+        # V1.9 — retrieval plan
         # --------------------------------------------------------
         plan = {"read_layers": [], "layers": [], "triggers": []}
         if self.router is not None:
@@ -182,7 +181,6 @@ class ResponseEngine:
 
         read_layers = set(plan.get("read_layers", []) or [])
 
-        # If router is off, fall back to old behavior — read everything.
         if not self.router:
             read_layers = {
                 "episodic", "childhood", "emotion", "identity",
@@ -191,7 +189,7 @@ class ResponseEngine:
             }
 
         # --------------------------------------------------------
-        # 1. CONTEXT (reads only — safe to skip)
+        # 1. CONTEXT (reads only)
         # --------------------------------------------------------
         context = ""
 
@@ -214,7 +212,6 @@ class ResponseEngine:
                     cached = None
 
             if cached and cached.get("mode") == "hit":
-                # Reuse the exact story — skip the LLM
                 self.short_term.add("user", user_message)
                 self.short_term.add("assistant", cached["story"])
                 return cached["story"]
@@ -231,7 +228,7 @@ class ResponseEngine:
                 except Exception as e:
                     print(f"⚠️ childhood.build_context failed: {e}")
 
-        # Dev / body-mood (cheap, always useful)
+        # Dev / body-mood
         try:
             inner_line = self.dev.describe()
             context = f"{context}\n\nYour body and mood: {inner_line}"
@@ -279,6 +276,15 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ personality.describe failed: {e}")
 
+        # V1.9 — her direction of growth (goals)
+        if ("motivation" in read_layers or "identity" in read_layers) and getattr(self.dev, "goals", None) is not None:
+            try:
+                goals_line = self.dev.goals.describe()
+                if goals_line:
+                    context = f"{context}\n\n{goals_line}"
+            except Exception as e:
+                print(f"⚠️ goals.describe failed: {e}")
+
         # Evolution
         if self.evolution and (
             "identity" in read_layers or "personality" in read_layers
@@ -290,7 +296,7 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ evolution.describe failed: {e}")
 
-        # Pinecone semantic memory (read only — process() still runs later)
+        # Pinecone semantic memory
         if self.integrations and "relationship" in read_layers:
             try:
                 semantic_line = self.integrations.build_context(user_message)
@@ -323,7 +329,7 @@ class ResponseEngine:
                 print(f"⚠️ learning.describe failed: {e}")
 
         # --------------------------------------------------------
-        # 2. COGNITION — side effect must ALWAYS run
+        # 2. COGNITION — side effect always runs
         # --------------------------------------------------------
         trace = None
         try:
@@ -345,7 +351,7 @@ class ResponseEngine:
             print(f"⚠️ cognition.process failed: {e}")
 
         # --------------------------------------------------------
-        # 3. CURIOSITY — side effect must ALWAYS run
+        # 3. CURIOSITY — side effect always runs
         # --------------------------------------------------------
         try:
             if trace is not None:
@@ -395,7 +401,7 @@ class ResponseEngine:
         self.memory.process(user_message, reply)
 
         # --------------------------------------------------------
-        # STATE UPDATES — ALWAYS RUN
+        # STATE UPDATES — always run
         # --------------------------------------------------------
         try:
             self.dev.tick()
@@ -528,6 +534,23 @@ class ResponseEngine:
             print(f"⚠️ learning.post_turn failed: {e}")
 
         # --------------------------------------------------------
+        # V1.9 — goals: observe what Ruby noticed + deepen the seed
+        # --------------------------------------------------------
+        if getattr(self.dev, "goals", None) is not None:
+            try:
+                # Extract focused topics from cognition trace
+                if trace is not None:
+                    focused = trace.get("focused_on", {}) or {}
+                    for topic in focused.keys():
+                        if topic and len(topic) > 3:
+                            self.dev.goals.observe(topic, weight=1)
+
+                # Every message deepens the seed drive
+                self.dev.goals.reinforce_seed(0.003)
+            except Exception as e:
+                print(f"⚠️ goals.observe failed: {e}")
+
+        # --------------------------------------------------------
         # V1.9 — store the story if a memory layer was used
         # --------------------------------------------------------
         if childhood_used and self.story_cache is not None:
@@ -576,6 +599,7 @@ class ResponseEngine:
                 self.web_knowledge.wipe()
             except Exception:
                 pass
+        # Note: goals.wipe() is called via dev.wipe() — seed survives.
         try:
             from social.interaction_history import InteractionHistory
             InteractionHistory().wipe()
@@ -659,6 +683,19 @@ class ResponseEngine:
 
     def integration_stats(self):
         return self.integrations.stats() if self.integrations else {}
+
+    # V1.9 — goals accessor
+    def goals_stats(self):
+        if getattr(self.dev, "goals", None) is None:
+            return {}
+        try:
+            return {
+                "seed": self.dev.goals._data.get("seed", {}),
+                "goals": self.dev.goals.current_goals(),
+                "themes": self.dev.goals.top_themes(10),
+            }
+        except Exception:
+            return {}
 
     # ----------------------------------------
     # V1.7 — Web
