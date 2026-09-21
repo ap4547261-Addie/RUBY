@@ -1,4 +1,4 @@
-# main.py - Ruby V1.8 (WebSocket bridge for Lemur extension)
+# main.py - Ruby V1.9 (System 1/2 + Router + StoryCache + Lemur bridge)
 
 import os
 import shutil
@@ -7,6 +7,8 @@ import flet as ft
 
 from brain.local_brain import LocalBrain
 from brain.response_engine import ResponseEngine
+from brain.system1 import System1
+from brain.system2 import System2
 from prompts.ruby_prompt import RUBY_PROMPT
 from settings.settings_manager import SettingsManager
 from tools.ws_server import WSServer
@@ -26,6 +28,9 @@ def main(page: ft.Page):
 
     user_name = settings.get("user_name", "not_set")
     response_engine = ResponseEngine(brain, user_name=user_name, platform="private")
+
+    system1 = System1(user_name=user_name)
+    system2 = System2(response_engine, ruby_prompt=RUBY_PROMPT)
 
     # ----------------------------------------
     # UI
@@ -206,13 +211,13 @@ def main(page: ft.Page):
         )
         context_field = ft.TextField(
             label="Context Size",
-            value=str(settings.get("context_size", 1024)),
+            value=str(settings.get("context_size", 4096)),
             keyboard_type=ft.KeyboardType.NUMBER,
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
         threads_field = ft.TextField(
             label="Threads",
-            value=str(settings.get("threads", 4)),
+            value=str(settings.get("threads", 6)),
             keyboard_type=ft.KeyboardType.NUMBER,
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
         )
@@ -639,10 +644,10 @@ def main(page: ft.Page):
 
         def save_and_close(ev):
             try:
-                ctx = int(context_field.value or 1024)
-                thr = int(threads_field.value or 4)
+                ctx = int(context_field.value or 4096)
+                thr = int(threads_field.value or 6)
             except ValueError:
-                ctx, thr = 1024, 4
+                ctx, thr = 4096, 6
             settings.update({
                 "user_name": name_field.value.strip() or "not_set",
                 "user_phone": phone_field.value.strip(),
@@ -781,9 +786,9 @@ def main(page: ft.Page):
         page.open(settings_dialog)
 
     # ----------------------------------------
-    # Send Message
+    # Send Message — System 1 routes, System 2 handles
     # ----------------------------------------
-    def send_message(e):
+    async def send_message(e):
         msg = message_box.value.strip()
         if not msg:
             return
@@ -794,11 +799,26 @@ def main(page: ft.Page):
             add_message("Ruby", "Load my brain first 😭 (⚙️)")
             return
 
-        status.value = "💭 Ruby is thinking..."
+        route = system1.classify(msg)
+        print(f"🧭 System1 route: {route}")
+
+        if route == "trivial":
+            status.value = "💭 ..."
+        elif route == "deep":
+            status.value = "💭 thinking deeply..."
+        else:
+            status.value = "💭 Ruby is thinking..."
         page.update()
 
         try:
-            reply = response_engine.respond(msg, RUBY_PROMPT)
+            if route == "trivial":
+                reply = await asyncio.to_thread(
+                    response_engine.respond_fast, msg, RUBY_PROMPT
+                )
+            else:
+                reply = await asyncio.to_thread(
+                    system2.think, msg, route
+                )
         except Exception as ex:
             reply = f"⚠️ error: {ex}"
             print(f"❌ respond error: {ex}")
@@ -841,9 +861,6 @@ def main(page: ft.Page):
     load_chat_history()
     page.update()
 
-    # ----------------------------------------
-    # V1.8 — Start WS server FIRST, then load model in background
-    # ----------------------------------------
     page.run_task(ws_server.serve)
 
     if settings.has_model():
