@@ -11,8 +11,8 @@ class LocalBrain:
             print(f"🔄 Loading model from: {model_path}")
             self.model = Llama(
                 model_path=model_path,
-                n_ctx=4096,             # ← fits the current prompt size
-                n_threads=3,
+                n_ctx=4096,             # fits the full ResponseEngine prompt
+                n_threads=6,            # ← was 3 — use more CPU cores
                 verbose=False,
                 chat_format="chatml",
             )
@@ -51,7 +51,13 @@ class LocalBrain:
 
         return " ".join(reply.split()).strip()
 
-    def generate(self, description: str, history: list, user_name: str = "not_set") -> str:
+    def generate(
+        self,
+        description: str,
+        history: list,
+        user_name: str = "not_set",
+        max_tokens: int = 80,        # ← was hardcoded 200
+    ) -> str:
         if self.model is None:
             return "My brain isn't loaded yet."
 
@@ -62,7 +68,7 @@ class LocalBrain:
         try:
             result = self.model.create_chat_completion(
                 messages=messages,
-                max_tokens=200,
+                max_tokens=max_tokens,     # ← respects caller's value
                 temperature=0.9,
                 top_p=0.9,
                 repeat_penalty=1.15,
