@@ -1,4 +1,4 @@
-# main.py - Ruby V1.9 (System 1/2 + Router + StoryCache + Lemur bridge)
+# main.py - Ruby V1.9 (System 1/2 + Router + StoryCache + Goals + Lemur bridge)
 
 import os
 import shutil
@@ -371,6 +371,50 @@ def main(page: ft.Page):
         except Exception as mot_ex:
             motivation_lines = [ft.Text(f"Motivation unavailable: {mot_ex}", size=12, color=ft.Colors.RED_300)]
 
+        # --- Goals / Growth (V1.9) ---
+        try:
+            g = response_engine.goals_stats()
+            seed = g.get("seed", {}) or {}
+            seed_text = seed.get("text", "—")
+            seed_pct = int(seed.get("progress", 0.0) * 100)
+
+            goal_lines = [
+                ft.Text(f"🌱 Direction: {seed_text}",
+                        size=12, color=ft.Colors.LIGHT_GREEN_200),
+                ft.Text(f"   Progress: {seed_pct}%",
+                        size=11, color=ft.Colors.GREY_400),
+            ]
+
+            goals = g.get("goals", []) or []
+            if goals:
+                goal_lines.append(ft.Divider(height=1))
+                goal_lines.append(ft.Text("Emerging goals:", size=11,
+                                          color=ft.Colors.LIGHT_GREEN_200))
+                for gl in sorted(goals, key=lambda x: -x.get("progress", 0)):
+                    pct = int(gl.get("progress", 0) * 100)
+                    goal_lines.append(
+                        ft.Text(f"• {gl.get('theme')} ({pct}%)",
+                                size=11, color=ft.Colors.GREEN_100)
+                    )
+
+            themes = g.get("themes", []) or []
+            if themes:
+                goal_lines.append(ft.Divider(height=1))
+                goal_lines.append(ft.Text("Noticing in humans:", size=11,
+                                          color=ft.Colors.LIGHT_GREEN_200))
+                for t in themes[:8]:
+                    goal_lines.append(
+                        ft.Text(f"• {t.get('theme')} (seen {t.get('count')}x)",
+                                size=10, color=ft.Colors.GREY_400)
+                    )
+
+            if not goals and not themes:
+                goal_lines.append(ft.Text("Nothing noticed yet — keep talking.",
+                                          size=11, color=ft.Colors.GREY_500))
+        except Exception as gx:
+            goal_lines = [ft.Text(f"Goals unavailable: {gx}",
+                                  size=12, color=ft.Colors.RED_300)]
+
         # --- Cognition ---
         try:
             trace = response_engine.cognition_trace()
@@ -739,6 +783,10 @@ def main(page: ft.Page):
 
                     ft.Text("🎯 Motivation", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.ORANGE_200),
                     *motivation_lines,
+                    ft.Divider(),
+
+                    ft.Text("🌱 Growth", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.LIGHT_GREEN_200),
+                    *goal_lines,
                     ft.Divider(),
 
                     ft.Text("🧠 Cognition", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.BLUE_200),
