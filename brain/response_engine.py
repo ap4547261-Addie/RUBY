@@ -98,6 +98,36 @@ class ResponseEngine:
             self.web_learning = None
             self.web_knowledge = None
 
+    # ============================================================
+    # V1.8 — FAST PATH (System 1 / trivial messages)
+    # ============================================================
+    def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
+        """
+        Minimal-context response for trivial messages.
+        Skips all heavy context blocks (memory/emotion/identity/etc).
+        Only uses the base persona prompt + short-term history.
+        """
+        try:
+            description = ruby_prompt.format(user_name=self.user_name)
+        except Exception:
+            description = ruby_prompt
+
+        self.short_term.add("user", user_message)
+        try:
+            reply = self.brain.generate(
+                description=description,
+                history=self.short_term.get_messages(),
+                user_name=self.user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ respond_fast failed: {e}")
+            reply = "[FAST ERROR] " + str(e)
+        self.short_term.add("assistant", reply)
+        return reply
+
+    # ============================================================
+    # FULL PATH (System 2)
+    # ============================================================
     def respond(self, user_message: str, ruby_prompt: str) -> str:
         # V1.3 — evaluate last prediction
         try:
