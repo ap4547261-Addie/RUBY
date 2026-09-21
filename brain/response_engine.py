@@ -1,4 +1,4 @@
-# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache + Goals)
+# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache + Goals + Curiosity)
 
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
@@ -78,7 +78,7 @@ class ResponseEngine:
         self.reflection = ReflectionEngine(user_name=user_name)
         self.motivation = MotivationEngine(user_name=user_name, platform=platform)
         self.cognition = CognitionEngine(user_name=user_name)
-        self.curiosity = Curiosity(user_name=user_name)
+        self.curiosity = Curiosity()
         self.learning = LearningEngine(user_name=user_name)
         self.personality = PersonalityDevelopment(user_name=user_name)
 
@@ -141,7 +141,6 @@ class ResponseEngine:
     # V1.8 — FAST PATH
     # ============================================================
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
-        # Handles both prompt formats — with or without {context}
         try:
             description = ruby_prompt.format(user_name=self.user_name, context="")
         except Exception:
@@ -167,6 +166,14 @@ class ResponseEngine:
     # FULL PATH (System 2) — router-aware
     # ============================================================
     def respond(self, user_message: str, ruby_prompt: str) -> str:
+        # --------------------------------------------------------
+        # Ruby notices what she's curious about
+        # --------------------------------------------------------
+        try:
+            self.curiosity.notice(user_message)
+        except Exception as e:
+            print(f"⚠️ curiosity.notice failed: {e}")
+
         try:
             self.learning.pre_turn(user_message)
         except Exception as e:
@@ -333,6 +340,23 @@ class ResponseEngine:
                 print(f"⚠️ learning.describe failed: {e}")
 
         # --------------------------------------------------------
+        # V1.9 — What Ruby is curious about
+        # --------------------------------------------------------
+        try:
+            strong = self.curiosity.strongest()
+            if strong and strong.get("strength", 0) >= 0.55:
+                lines = ["Things you've been noticing you don't fully understand:"]
+                lines.append(f"- {strong['subject']} ({strong['reason']})")
+
+                for u in self.curiosity.peek_unknowns()[:2]:
+                    if u.get("strength", 0) >= 0.55 and u["subject"] != strong["subject"]:
+                        lines.append(f"- {u['subject']}")
+
+                context = f"{context}\n\n" + "\n".join(lines)
+        except Exception as e:
+            print(f"⚠️ curiosity context failed: {e}")
+
+        # --------------------------------------------------------
         # 2. COGNITION — side effect always runs
         # --------------------------------------------------------
         trace = None
@@ -353,30 +377,6 @@ class ResponseEngine:
                 context = f"{context}\n\nYour thinking:\n{cognition_line}"
         except Exception as e:
             print(f"⚠️ cognition.process failed: {e}")
-
-        # --------------------------------------------------------
-        # 3. CURIOSITY — side effect always runs
-        # --------------------------------------------------------
-        try:
-            if trace is not None:
-                rel = self.memory.relationship.get_state()
-                inner = self.dev.state.get()
-                curiosity_directive = self.curiosity.process(
-                    user_message,
-                    decision=trace.get("decision", {}),
-                    context={
-                        "trust": rel["trust"],
-                        "attachment": rel["attachment"],
-                        "irritation": inner["irritation"],
-                        "warmth": inner["warmth"],
-                    },
-                )
-                if curiosity_directive and (
-                    "motivation" in read_layers or "emotion" in read_layers
-                ):
-                    context = f"{context}\n\n{curiosity_directive}"
-        except Exception as e:
-            print(f"⚠️ curiosity failed: {e}")
 
         # --------------------------------------------------------
         # FORMAT PROMPT — supports both {user_name} and {context}
@@ -541,7 +541,7 @@ class ResponseEngine:
             print(f"⚠️ learning.post_turn failed: {e}")
 
         # --------------------------------------------------------
-        # V1.9 — goals: observe what Ruby noticed + deepen the seed
+        # V1.9 — goals
         # --------------------------------------------------------
         if getattr(self.dev, "goals", None) is not None:
             try:
@@ -556,7 +556,7 @@ class ResponseEngine:
                 print(f"⚠️ goals.observe failed: {e}")
 
         # --------------------------------------------------------
-        # V1.9 — store the story if a memory layer was used
+        # V1.9 — story cache store
         # --------------------------------------------------------
         if childhood_used and self.story_cache is not None:
             try:
@@ -696,6 +696,17 @@ class ResponseEngine:
                 "seed": self.dev.goals._data.get("seed", {}),
                 "goals": self.dev.goals.current_goals(),
                 "themes": self.dev.goals.top_themes(10),
+            }
+        except Exception:
+            return {}
+
+    def curiosity_stats(self):
+        try:
+            return {
+                "interests": self.curiosity.peek_interests(),
+                "unknowns": self.curiosity.peek_unknowns(),
+                "uncertainties": self.curiosity.peek_uncertainties(),
+                "strongest": self.curiosity.strongest(),
             }
         except Exception:
             return {}
