@@ -1,6 +1,15 @@
 from datetime import datetime
 from ruby_core.internal_state import InternalState
 
+# V1.9 — goals wiring
+try:
+    from ruby_core.goals import Goals
+    GOALS_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Goals not available: {e}")
+    GOALS_AVAILABLE = False
+    Goals = None
+
 
 class Development:
     """
@@ -11,6 +20,16 @@ class Development:
     def __init__(self, user_name="not_set"):
         self.user_name = user_name
         self.state = InternalState(user_name=user_name)
+
+        # V1.9 — direction of growth
+        if GOALS_AVAILABLE:
+            try:
+                self.goals = Goals(user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ Goals init failed: {e}")
+                self.goals = None
+        else:
+            self.goals = None
 
     def tick(self):
         s = self.state.get()
@@ -84,3 +103,10 @@ class Development:
 
     def wipe(self):
         self.state.wipe()
+
+        # V1.9 — goals reset (seed survives)
+        if getattr(self, "goals", None) is not None:
+            try:
+                self.goals.wipe()
+            except Exception as e:
+                print(f"⚠️ goals.wipe failed: {e}")
