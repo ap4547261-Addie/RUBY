@@ -1,8 +1,27 @@
+# memory/database.py
+# Ruby's SQLite layer. Stores episodes, facts, relationship state.
+# On Android, data must live in FLET_APP_STORAGE_DATA (writable).
+# On desktop, falls back to the app directory.
+
 import sqlite3
 import os
 
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "ruby_memory.db")
+def _db_path() -> str:
+    # Android (and any Flet runtime) exposes a writable directory here.
+    storage = os.getenv("FLET_APP_STORAGE_DATA")
+    if storage:
+        try:
+            os.makedirs(storage, exist_ok=True)
+            return os.path.join(storage, "ruby_memory.db")
+        except Exception as e:
+            print(f"⚠️ Could not use FLET_APP_STORAGE_DATA: {e}")
+
+    # Desktop fallback
+    return os.path.join(os.path.dirname(__file__), "ruby_memory.db")
+
+
+DB_PATH = _db_path()
 
 
 def get_connection():
@@ -37,7 +56,6 @@ def init_db():
     """)
 
     # -------- Relationship: continuous emotional dimensions --------
-    # trust, familiarity, attachment, respect = REAL numbers, grow forever.
     c.execute("""
         CREATE TABLE IF NOT EXISTS relationship (
             id INTEGER PRIMARY KEY,
@@ -56,4 +74,4 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print("✅ Memory database initialized.")
+    print(f"✅ Memory database initialized at {DB_PATH}")
