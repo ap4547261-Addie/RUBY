@@ -21,7 +21,7 @@ class MemoryRouter:
         {
             "triggers": [...],
             "layers": [...],
-            "read_layers": [...],   # subset safe to inject into prompt
+            "read_layers": [...],
             "token_budget": int
         }
 
@@ -34,7 +34,6 @@ class MemoryRouter:
             relationship state, cognition trace
 
         PROCESS calls (side effects) — ALWAYS run, regardless of router.
-            These update Ruby's internal state and must not be skipped:
             cognition.process, curiosity.process, emotion.process,
             identity.process, social.process, reflection.process,
             motivation.process, personality.process, dev.tick,
@@ -48,37 +47,38 @@ class MemoryRouter:
     # ============================================================
 
     TRIGGER_MAP = {
-        # lightweight
         "greeting": [],
         "casual": [],
 
-        # emotion
         "emotional": [
             "emotion",
             "episodic_emotional",
             "relationship",
         ],
 
-        # explicit memory/history
         "memory": [
             "episodic",
             "childhood",
             "relationship",
         ],
 
-        # identity
+        # NEW — family, origin, self-facts
+        "family": [
+            "childhood",
+            "identity",
+            "relationship",
+        ],
+
         "identity": [
             "identity",
             "personality",
             "social",
         ],
 
-        # informational/topic questions
         "topic": [
             "episodic",
         ],
 
-        # reflective / inner-state questions
         "reflective": [
             "emotion",
             "motivation",
@@ -86,7 +86,6 @@ class MemoryRouter:
             "relationship",
         ],
 
-        # relationship / attachment
         "love": [
             "relationship",
             "emotion",
@@ -94,7 +93,6 @@ class MemoryRouter:
             "social",
         ],
 
-        # deep self-model
         "deep_self": [
             "identity",
             "personality",
@@ -145,11 +143,13 @@ class MemoryRouter:
         # --------------------------------------------------------
         # MEMORY
         # --------------------------------------------------------
+        # Redundant patterns removed:
+        #   "\bdo you remember\b" is covered by "\bremember\b"
+        #   "\bdo you recall\b"   is covered by "\brecall\b"
 
         "memory": [
             r"\bremember\b",
-            r"\bdo you remember\b",
-            r"\bdo you recall\b",
+            r"\brecall\b",
             r"\blast time\b",
             r"\bearlier\b",
             r"\bbefore\b.*\b(when|we|you said|i said)\b",
@@ -162,6 +162,39 @@ class MemoryRouter:
             r"\bchildhood\b",
             r"\bgrowing up\b",
             r"\bback when\b",
+        ],
+
+        # --------------------------------------------------------
+        # FAMILY / ORIGIN
+        # --------------------------------------------------------
+        # NEW — questions about family, siblings, parents, roots.
+        # Ensures childhood memories surface when Ruby is asked
+        # about her past. Without this she invents.
+
+        "family": [
+            r"\bsiblings?\b",
+            r"\bbrothers?\b",
+            r"\bsisters?\b",
+            r"\bfamily\b",
+            r"\bfamilies\b",
+            r"\bmother\b",
+            r"\bfather\b",
+            r"\bparents?\b",
+            r"\bmom\b",
+            r"\bmum\b",
+            r"\bdad\b",
+            r"\baunt\b",
+            r"\buncle\b",
+            r"\bcousins?\b",
+            r"\brelatives?\b",
+            r"\borphan\b",
+            r"\bhow old are you\b",
+            r"\byour age\b",
+            r"\bwhere are you from\b",
+            r"\byour home\b",
+            r"\bgrew up\b",
+            r"\braised\b",
+            r"\bchildhood\b",
         ],
 
         # --------------------------------------------------------
@@ -184,9 +217,6 @@ class MemoryRouter:
         # --------------------------------------------------------
         # TOPIC
         # --------------------------------------------------------
-        # Anchored to message start. Also excludes "your" so that
-        # "what is your favorite color?" is not treated as a
-        # general knowledge question.
 
         "topic": [
             r"^\s*what\s+is\s+(?!your|your own)\b",
@@ -255,10 +285,6 @@ class MemoryRouter:
     # LAYER CLASSIFICATION
     # ============================================================
 
-    # Layers safe to fetch conditionally (context only).
-    # These are pure read operations — skipping them changes
-    # what Ruby sees but not what Ruby becomes.
-
     READ_LAYERS = {
         "episodic",
         "episodic_emotional",
@@ -273,11 +299,6 @@ class MemoryRouter:
         "learning",
         "relationship",
     }
-
-    # Layers that must run regardless of routing.
-    # These have side effects (update internal state).
-    # Listed here for documentation — the router does not
-    # control them; they live inside ResponseEngine.
 
     ALWAYS_RUN = {
         "cognition_process",
@@ -324,6 +345,7 @@ class MemoryRouter:
         "topic": 1,
         "emotional": 2,
         "memory": 3,
+        "family": 3,          # NEW
         "identity": 3,
         "reflective": 3,
         "love": 4,
@@ -338,30 +360,11 @@ class MemoryRouter:
     # ============================================================
 
     def plan(self, message: str) -> Dict:
-        """
-        Build a memory retrieval plan.
-
-        No database access.
-        No LLM calls.
-
-        Returns:
-            {
-                "triggers": [...],
-                "layers": [...],        # all relevant layers, priority-ordered
-                "read_layers": [...],   # subset safe to inject as context
-                "token_budget": int,
-            }
-        """
-
         if not message or not message.strip():
             return self._empty_plan()
 
         m = self._normalize(message)
         fired = self._detect_triggers(m)
-
-        # --------------------------------------------------------
-        # No explicit trigger
-        # --------------------------------------------------------
 
         if not fired:
             if "?" in message:
@@ -373,10 +376,6 @@ class MemoryRouter:
                 }
             return self._empty_plan()
 
-        # --------------------------------------------------------
-        # Greeting/casual messages stay cheap.
-        # --------------------------------------------------------
-
         meaningful = [
             t for t in fired
             if t not in ("greeting", "casual")
@@ -385,17 +384,9 @@ class MemoryRouter:
         if not meaningful:
             return self._empty_plan()
 
-        # --------------------------------------------------------
-        # Build unique layer set.
-        # --------------------------------------------------------
-
         layers = set()
         for trigger in meaningful:
             layers.update(self.TRIGGER_MAP.get(trigger, []))
-
-        # --------------------------------------------------------
-        # Sort by importance.
-        # --------------------------------------------------------
 
         ordered_layers = sorted(
             layers,
@@ -403,18 +394,10 @@ class MemoryRouter:
             reverse=True,
         )
 
-        # --------------------------------------------------------
-        # Filter to read layers only.
-        # --------------------------------------------------------
-
         read_layers = [
             layer for layer in ordered_layers
             if layer in self.READ_LAYERS
         ]
-
-        # --------------------------------------------------------
-        # Calculate token budget.
-        # --------------------------------------------------------
 
         weight = sum(
             self.TRIGGER_WEIGHT.get(t, 1)
@@ -441,22 +424,9 @@ class MemoryRouter:
 
     @staticmethod
     def _normalize(message: str) -> str:
-        """
-        Normalize repeated characters and whitespace.
-
-        Example:
-            "I missssss you!!!"
-            -> "i missss you"
-        """
-
         m = message.lower().strip()
-
-        # Collapse excessive repeated characters.
         m = re.sub(r"(.)\1{3,}", r"\1\1", m)
-
-        # Normalize whitespace.
         m = re.sub(r"\s+", " ", m)
-
         return m
 
     # ============================================================
@@ -464,19 +434,12 @@ class MemoryRouter:
     # ============================================================
 
     def _detect_triggers(self, message: str) -> List[str]:
-        """
-        Detect every semantic trigger.
-        Duplicate triggers cannot appear in the result.
-        """
-
         fired = []
-
         for trigger, patterns in self.TRIGGER_PATTERNS.items():
             for pattern in patterns:
                 if re.search(pattern, message):
                     fired.append(trigger)
                     break
-
         return fired
 
     # ============================================================
