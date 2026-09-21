@@ -1,4 +1,4 @@
-# brain/response_engine.py — Ruby V1.8
+# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache)
 
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
@@ -14,6 +14,23 @@ from cognition.cognition_engine import CognitionEngine
 from cognition.curiosity import Curiosity
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
+
+# V1.9 — routing + story cache
+try:
+    from brain.memory_router import get_memory_router
+    ROUTER_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ MemoryRouter not available: {e}")
+    ROUTER_AVAILABLE = False
+    get_memory_router = None
+
+try:
+    from brain.story_cache import get_story_cache
+    STORY_CACHE_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ StoryCache not available: {e}")
+    STORY_CACHE_AVAILABLE = False
+    get_story_cache = None
 
 # V1.5 — optional
 try:
@@ -98,15 +115,32 @@ class ResponseEngine:
             self.web_learning = None
             self.web_knowledge = None
 
+        # V1.9 — Router + StoryCache
+        if ROUTER_AVAILABLE:
+            try:
+                self.router = get_memory_router(user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ Router init failed: {e}")
+                self.router = None
+        else:
+            self.router = None
+
+        if STORY_CACHE_AVAILABLE:
+            try:
+                pinecone_mem = None
+                if self.integrations is not None:
+                    pinecone_mem = getattr(self.integrations, "pinecone", None)
+                self.story_cache = get_story_cache(pinecone_mem, user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ StoryCache init failed: {e}")
+                self.story_cache = None
+        else:
+            self.story_cache = None
+
     # ============================================================
     # V1.8 — FAST PATH (System 1 / trivial messages)
     # ============================================================
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
-        """
-        Minimal-context response for trivial messages.
-        Skips all heavy context blocks (memory/emotion/identity/etc).
-        Only uses the base persona prompt + short-term history.
-        """
         try:
             description = ruby_prompt.format(user_name=self.user_name)
         except Exception:
@@ -126,7 +160,7 @@ class ResponseEngine:
         return reply
 
     # ============================================================
-    # FULL PATH (System 2)
+    # FULL PATH (System 2) — router-aware context
     # ============================================================
     def respond(self, user_message: str, ruby_prompt: str) -> str:
         # V1.3 — evaluate last prediction
@@ -135,55 +169,120 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ learning.pre_turn failed: {e}")
 
-        # 1. Build context
-        context = self.memory.build_context(user_message)
+        # --------------------------------------------------------
+        # V1.9 — build retrieval plan
+        # --------------------------------------------------------
+        plan = {"read_layers": [], "layers": [], "triggers": []}
+        if self.router is not None:
+            try:
+                plan = self.router.plan(user_message)
+                print(f"🧭 plan: layers={plan['layers']} budget={plan['token_budget']}")
+            except Exception as e:
+                print(f"⚠️ router.plan failed: {e}")
 
-        # Childhood memories — surface only when triggers match
-        try:
-            childhood_line = self.childhood.build_context(user_message, limit=2)
-            if childhood_line:
-                context = f"{context}\n\n{childhood_line}"
-        except Exception as e:
-            print(f"⚠️ childhood.build_context failed: {e}")
+        read_layers = set(plan.get("read_layers", []) or [])
 
+        # If router is off, fall back to old behavior — read everything.
+        if not self.router:
+            read_layers = {
+                "episodic", "childhood", "emotion", "identity",
+                "social", "motivation", "personality", "cognition_trace",
+                "web", "learning", "relationship",
+            }
+
+        # --------------------------------------------------------
+        # 1. CONTEXT (reads only — safe to skip)
+        # --------------------------------------------------------
+        context = ""
+
+        # Episodic / relationship
+        if "episodic" in read_layers or "relationship" in read_layers:
+            try:
+                context = self.memory.build_context(user_message)
+            except Exception as e:
+                print(f"⚠️ memory.build_context failed: {e}")
+
+        # Childhood — story cache first
+        childhood_used = False
+        if "childhood" in read_layers:
+            cached = None
+            if self.story_cache is not None:
+                try:
+                    cached = self.story_cache.lookup(user_message, layer="childhood")
+                except Exception as e:
+                    print(f"⚠️ story cache lookup failed: {e}")
+                    cached = None
+
+            if cached and cached.get("mode") == "hit":
+                # Reuse the exact story — skip the LLM
+                self.short_term.add("user", user_message)
+                self.short_term.add("assistant", cached["story"])
+                return cached["story"]
+
+            if cached and cached.get("mode") == "soft":
+                context = f"{context}\n\nPreviously told:\n{cached['story']}"
+                childhood_used = True
+            else:
+                try:
+                    childhood_line = self.childhood.build_context(user_message, limit=2)
+                    if childhood_line:
+                        context = f"{context}\n\n{childhood_line}"
+                        childhood_used = True
+                except Exception as e:
+                    print(f"⚠️ childhood.build_context failed: {e}")
+
+        # Dev / body-mood (cheap, always useful)
         try:
             inner_line = self.dev.describe()
             context = f"{context}\n\nYour body and mood: {inner_line}"
         except Exception as e:
             print(f"⚠️ dev.describe failed: {e}")
 
-        try:
-            emotions = self.emotion.get_all()
-            emotion_line = self.emotion_expr.describe(emotions)
-            context = f"{context}\n\nYour feelings right now: {emotion_line}"
-        except Exception as e:
-            print(f"⚠️ emotion.describe failed: {e}")
+        # Emotion
+        if "emotion" in read_layers:
+            try:
+                emotions = self.emotion.get_all()
+                emotion_line = self.emotion_expr.describe(emotions)
+                context = f"{context}\n\nYour feelings right now: {emotion_line}"
+            except Exception as e:
+                print(f"⚠️ emotion.describe failed: {e}")
 
-        try:
-            identity_line = self.identity.describe()
-            context = f"{context}\n\n{identity_line}"
-        except Exception as e:
-            print(f"⚠️ identity.describe failed: {e}")
+        # Identity
+        if "identity" in read_layers:
+            try:
+                identity_line = self.identity.describe()
+                context = f"{context}\n\n{identity_line}"
+            except Exception as e:
+                print(f"⚠️ identity.describe failed: {e}")
 
-        try:
-            social_line = self.social.describe()
-            context = f"{context}\n\nWho he is to you:\n{social_line}"
-        except Exception as e:
-            print(f"⚠️ social.describe failed: {e}")
+        # Social
+        if "social" in read_layers:
+            try:
+                social_line = self.social.describe()
+                context = f"{context}\n\nWho he is to you:\n{social_line}"
+            except Exception as e:
+                print(f"⚠️ social.describe failed: {e}")
 
-        try:
-            drive_line = self.motivation.describe()
-            context = f"{context}\n\nWhat you need right now: {drive_line}"
-        except Exception as e:
-            print(f"⚠️ motivation.describe failed: {e}")
+        # Motivation
+        if "motivation" in read_layers:
+            try:
+                drive_line = self.motivation.describe()
+                context = f"{context}\n\nWhat you need right now: {drive_line}"
+            except Exception as e:
+                print(f"⚠️ motivation.describe failed: {e}")
 
-        try:
-            personality_line = self.personality.describe()
-            context = f"{context}\n\n{personality_line}"
-        except Exception as e:
-            print(f"⚠️ personality.describe failed: {e}")
+        # Personality
+        if "personality" in read_layers:
+            try:
+                personality_line = self.personality.describe()
+                context = f"{context}\n\n{personality_line}"
+            except Exception as e:
+                print(f"⚠️ personality.describe failed: {e}")
 
-        if self.evolution:
+        # Evolution
+        if self.evolution and (
+            "identity" in read_layers or "personality" in read_layers
+        ):
             try:
                 values_line = self.evolution.describe()
                 if values_line:
@@ -191,8 +290,8 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ evolution.describe failed: {e}")
 
-        # V1.6 — semantic memory from Pinecone
-        if self.integrations:
+        # Pinecone semantic memory (read only — process() still runs later)
+        if self.integrations and "relationship" in read_layers:
             try:
                 semantic_line = self.integrations.build_context(user_message)
                 if semantic_line:
@@ -200,8 +299,8 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ integrations.build_context failed: {e}")
 
-        # V1.7 — web knowledge
-        if self.web_knowledge:
+        # Web knowledge
+        if self.web_knowledge and "web" in read_layers:
             try:
                 web_hits = self.web_knowledge.search(user_message, limit=3)
                 if web_hits:
@@ -214,14 +313,18 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ web search failed: {e}")
 
-        try:
-            learning_line = self.learning.describe()
-            if learning_line:
-                context = f"{context}\n\nWhat you've learned from experience: {learning_line}"
-        except Exception as e:
-            print(f"⚠️ learning.describe failed: {e}")
+        # Learning
+        if "learning" in read_layers:
+            try:
+                learning_line = self.learning.describe()
+                if learning_line:
+                    context = f"{context}\n\nWhat you've learned from experience: {learning_line}"
+            except Exception as e:
+                print(f"⚠️ learning.describe failed: {e}")
 
-        # V1.2 — cognition
+        # --------------------------------------------------------
+        # 2. COGNITION — side effect must ALWAYS run
+        # --------------------------------------------------------
         trace = None
         try:
             rel = self.memory.relationship.get_state()
@@ -235,12 +338,15 @@ class ResponseEngine:
                     "irritation": inner["irritation"],
                 },
             )
-            cognition_line = self.cognition.describe(trace)
-            context = f"{context}\n\nYour thinking:\n{cognition_line}"
+            if "cognition_trace" in read_layers:
+                cognition_line = self.cognition.describe(trace)
+                context = f"{context}\n\nYour thinking:\n{cognition_line}"
         except Exception as e:
             print(f"⚠️ cognition.process failed: {e}")
 
-        # Curiosity — she might ask a question back
+        # --------------------------------------------------------
+        # 3. CURIOSITY — side effect must ALWAYS run
+        # --------------------------------------------------------
         try:
             if trace is not None:
                 rel = self.memory.relationship.get_state()
@@ -255,12 +361,16 @@ class ResponseEngine:
                         "warmth": inner["warmth"],
                     },
                 )
-                if curiosity_directive:
+                if curiosity_directive and (
+                    "motivation" in read_layers or "emotion" in read_layers
+                ):
                     context = f"{context}\n\n{curiosity_directive}"
         except Exception as e:
             print(f"⚠️ curiosity failed: {e}")
 
-        # Format prompt
+        # --------------------------------------------------------
+        # FORMAT PROMPT
+        # --------------------------------------------------------
         try:
             base_prompt = ruby_prompt.format(user_name=self.user_name)
         except Exception:
@@ -270,23 +380,23 @@ class ResponseEngine:
         if context:
             description = f"{base_prompt}\n\n{context}"
 
-        # 2. Short-term
+        # --------------------------------------------------------
+        # GENERATE
+        # --------------------------------------------------------
         self.short_term.add("user", user_message)
 
-        # 3. Generate
         reply = self.brain.generate(
             description=description,
             history=self.short_term.get_messages(),
             user_name=self.user_name,
         )
 
-        # 4. Store reply
         self.short_term.add("assistant", reply)
-
-        # 5. Long-term memory
         self.memory.process(user_message, reply)
 
-        # 6. V0.5
+        # --------------------------------------------------------
+        # STATE UPDATES — ALWAYS RUN
+        # --------------------------------------------------------
         try:
             self.dev.tick()
             rel = self.memory.relationship.get_state()
@@ -298,7 +408,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ dev.on_message failed: {e}")
 
-        # 7. V0.6
         try:
             rel = self.memory.relationship.get_state()
             inner = self.dev.state.get()
@@ -315,7 +424,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.process failed: {e}")
 
-        # 8. V0.7
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -333,7 +441,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ identity.process failed: {e}")
 
-        # 9. V0.8
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -350,7 +457,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ social.process failed: {e}")
 
-        # 10. V0.9
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -365,7 +471,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ reflection.process failed: {e}")
 
-        # 11. V1.0
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -382,7 +487,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ motivation.process failed: {e}")
 
-        # 12. V1.4
         try:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
@@ -396,7 +500,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ personality.process failed: {e}")
 
-        # 13. V1.5
         if self.evolution:
             try:
                 rel = self.memory.relationship.get_state()
@@ -411,20 +514,27 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ evolution.process failed: {e}")
 
-        # 14. V1.6 — store in Pinecone
         if self.integrations:
             try:
                 self.integrations.process(user_message, reply)
             except Exception as e:
                 print(f"⚠️ integrations.process failed: {e}")
 
-        # 15. V1.3 — learning
         try:
             emo = self.emotion.get_all()
             if trace is not None:
                 self.learning.post_turn(trace, user_message, reply, emo)
         except Exception as e:
             print(f"⚠️ learning.post_turn failed: {e}")
+
+        # --------------------------------------------------------
+        # V1.9 — store the story if a memory layer was used
+        # --------------------------------------------------------
+        if childhood_used and self.story_cache is not None:
+            try:
+                self.story_cache.store(user_message, reply, layer="childhood")
+            except Exception as e:
+                print(f"⚠️ story cache store failed: {e}")
 
         return reply
 
@@ -461,7 +571,6 @@ class ResponseEngine:
                 self.integrations.wipe()
             except Exception:
                 pass
-        # V1.7
         if self.web_knowledge:
             try:
                 self.web_knowledge.wipe()
@@ -561,7 +670,6 @@ class ResponseEngine:
         return self.web_knowledge.search(query, limit=limit) if self.web_knowledge else []
 
     def learn_from_url(self, url: str) -> dict:
-        """Fetch a URL, learn from it, store in SQLite. Returns {ok, title, is_new, ...}."""
         if not self.web_knowledge or not self.web_learning or not Browser:
             return {"ok": False, "error": "web module unavailable"}
         try:
@@ -580,7 +688,6 @@ class ResponseEngine:
     # V1.8 — Extension bridge
     # ----------------------------------------
     def ingest_extension_content(self, platform: str, url: str, content: str) -> dict:
-        """Ingest raw content from the Lemur extension. Reuses existing web instances."""
         if not self.web_knowledge or not self.web_learning:
             return {"ok": False, "error": "web module unavailable"}
         if not content:
