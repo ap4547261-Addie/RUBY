@@ -141,10 +141,14 @@ class ResponseEngine:
     # V1.8 — FAST PATH
     # ============================================================
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
+        # Handles both prompt formats — with or without {context}
         try:
-            description = ruby_prompt.format(user_name=self.user_name)
+            description = ruby_prompt.format(user_name=self.user_name, context="")
         except Exception:
-            description = ruby_prompt
+            try:
+                description = ruby_prompt.format(user_name=self.user_name)
+            except Exception:
+                description = ruby_prompt
 
         self.short_term.add("user", user_message)
         try:
@@ -375,16 +379,19 @@ class ResponseEngine:
             print(f"⚠️ curiosity failed: {e}")
 
         # --------------------------------------------------------
-        # FORMAT PROMPT
+        # FORMAT PROMPT — supports both {user_name} and {context}
         # --------------------------------------------------------
         try:
-            base_prompt = ruby_prompt.format(user_name=self.user_name)
+            base_prompt = ruby_prompt.format(user_name=self.user_name, context=context or "")
         except Exception:
-            base_prompt = ruby_prompt
-
-        description = base_prompt
-        if context:
-            description = f"{base_prompt}\n\n{context}"
+            try:
+                base_prompt = ruby_prompt.format(user_name=self.user_name)
+                description = f"{base_prompt}\n\n{context}" if context else base_prompt
+            except Exception:
+                base_prompt = ruby_prompt
+                description = f"{base_prompt}\n\n{context}" if context else base_prompt
+        else:
+            description = base_prompt
 
         # --------------------------------------------------------
         # GENERATE
@@ -538,14 +545,12 @@ class ResponseEngine:
         # --------------------------------------------------------
         if getattr(self.dev, "goals", None) is not None:
             try:
-                # Extract focused topics from cognition trace
                 if trace is not None:
                     focused = trace.get("focused_on", {}) or {}
                     for topic in focused.keys():
                         if topic and len(topic) > 3:
                             self.dev.goals.observe(topic, weight=1)
 
-                # Every message deepens the seed drive
                 self.dev.goals.reinforce_seed(0.003)
             except Exception as e:
                 print(f"⚠️ goals.observe failed: {e}")
@@ -599,7 +604,6 @@ class ResponseEngine:
                 self.web_knowledge.wipe()
             except Exception:
                 pass
-        # Note: goals.wipe() is called via dev.wipe() — seed survives.
         try:
             from social.interaction_history import InteractionHistory
             InteractionHistory().wipe()
@@ -684,7 +688,6 @@ class ResponseEngine:
     def integration_stats(self):
         return self.integrations.stats() if self.integrations else {}
 
-    # V1.9 — goals accessor
     def goals_stats(self):
         if getattr(self.dev, "goals", None) is None:
             return {}
