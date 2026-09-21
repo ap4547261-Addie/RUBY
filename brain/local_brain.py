@@ -56,7 +56,7 @@ class LocalBrain:
         description: str,
         history: list,
         user_name: str = "not_set",
-        max_tokens: int = 80,        # ← was hardcoded 200
+        max_tokens: int = 180,        # ← was hardcoded 200
     ) -> str:
         if self.model is None:
             return "My brain isn't loaded yet."
