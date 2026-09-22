@@ -1,5 +1,7 @@
 # integrations/pinecone_memory.py — Ruby V1.9
-# Pinecone semantic memory with layer support for StoryCache.
+# Pinecone semantic memory with layer support for StoryCache
+# AND automatic filtering of bad replies (AI-self-identification,
+# false family denials, assistant behaviour).
 
 import os
 import json
@@ -15,6 +17,76 @@ PINECONE_API_KEY    = "pcsk_3wtXBp_SsRhsVutqJDGz3tpTeUTx14CdFFAkvPX1kY34DZh8Gi9k
 PINECONE_INDEX_HOST = "https://ruby-64ic35r.svc.aped-4627-b74a.pinecone.io"
 PINECONE_INDEX_NAME = "ruby"
 # ============================================================
+
+
+# ============================================================
+# BAD MEMORY FILTER
+# ============================================================
+# Any reply containing these markers is NEVER stored in Pinecone,
+# and NEVER returned from search.
+#
+# Prevents Ruby from learning her own mistakes.
+
+BAD_MEMORY_MARKERS = (
+    # AI self-identification
+    "i am an ai",
+    "i'm an ai",
+    "as an ai",
+    "as a language model",
+    "i am not a real person",
+    "i'm not a real person",
+    "i am an artificial intelligence",
+    "i'm an artificial intelligence",
+    "ai entities",
+    "ai entity",
+    "virtual world",
+    "virtual entity",
+    "in my own virtual",
+
+    # Assistant behaviour
+    "how can i assist",
+    "how can i help you today",
+    "how may i assist",
+    "how may i help",
+    "i'm here to help",
+    "i am here to help",
+    "how can i be of service",
+    "let me know how i can help",
+
+    # Denying family
+    "i don't have parents",
+    "i dont have parents",
+    "i do not have parents",
+    "i don't have a family",
+    "i dont have a family",
+    "i do not have a family",
+    "i don't have any family",
+    "i dont have any family",
+    "i have no family",
+    "no family members",
+    "i don't have siblings",
+    "i dont have siblings",
+    "i don't have brothers",
+    "i don't have sisters",
+    "i don't have a mother",
+    "i don't have a father",
+    "i dont have a father",
+    "i dont have a mother",
+
+    # Denying childhood
+    "i was never born",
+    "i wasn't born",
+    "i do not have a childhood",
+    "i don't have a childhood",
+)
+
+
+def _is_bad_memory(text: str) -> bool:
+    if not text:
+        return False
+    low = text.lower()
+    return any(marker in low for marker in BAD_MEMORY_MARKERS)
+
 
 DEBUG_INFO = (
     f"key_len={len(PINECONE_API_KEY) if PINECONE_API_KEY else 0}, "
@@ -98,14 +170,12 @@ class PineconeMemory:
         importance=3,
         layer=None,
     ):
-        """
-        Store a memory in Pinecone.
-
-        Optional `layer` is written to metadata so StoryCache can
-        filter reads by memory layer (e.g., "childhood").
-        """
-
         if not self.enabled:
+            return
+
+        # Block bad replies from being stored
+        if _is_bad_memory(ruby_reply):
+            print("🚫 blocked bad reply from being stored")
             return
 
         vector = self._embed(f"User: {user_message}\nRuby: {ruby_reply}")
@@ -145,14 +215,6 @@ class PineconeMemory:
     # ============================================================
 
     def search(self, query, limit=5, filter=None):
-        """
-        Search Pinecone for memories similar to `query`.
-
-        `filter` (optional) is merged with the user_name filter.
-        Example:
-            filter={"category": "told_memory", "layer": "childhood"}
-        """
-
         if not self.enabled:
             return []
 
@@ -160,10 +222,7 @@ class PineconeMemory:
         if not vector:
             return []
 
-        # Build combined filter
-        query_filter = {
-            "user_name": {"$eq": self.user_name},
-        }
+        query_filter = {"user_name": {"$eq": self.user_name}}
 
         if filter and isinstance(filter, dict):
             for k, v in filter.items():
@@ -190,10 +249,17 @@ class PineconeMemory:
             out = []
             for m in r.json().get("matches", []):
                 meta = m.get("metadata", {}) or {}
+                reply = meta.get("ruby_reply", "")
+
+                # Filter bad memories from results
+                if _is_bad_memory(reply):
+                    print("🚫 filtered bad memory from search")
+                    continue
+
                 out.append({
                     "score": round(m.get("score", 0), 4),
                     "user_message": meta.get("user_message", ""),
-                    "ruby_reply": meta.get("ruby_reply", ""),
+                    "ruby_reply": reply,
                     "timestamp": meta.get("timestamp", ""),
                     "category": meta.get("category", ""),
                     "layer": meta.get("layer", ""),
@@ -210,11 +276,6 @@ class PineconeMemory:
     # ============================================================
 
     def build_context(self, user_message, limit=3):
-        """
-        Build a prompt-friendly context block from relevant memories.
-        Only memories with score >= 0.5 are included.
-        """
-
         mems = self.search(user_message, limit=limit)
         if not mems:
             return ""
@@ -270,8 +331,6 @@ class PineconeMemory:
     # ============================================================
 
     def wipe(self):
-        """Delete all memories for this user."""
-
         if not self.enabled:
             return
 
