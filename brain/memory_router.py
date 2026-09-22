@@ -1,3 +1,4 @@
+
 # brain/memory_router.py — Ruby's selective memory recall
 # Decides which memory layers to fetch per message.
 # No LLM calls. Pure pattern matching.
@@ -62,7 +63,6 @@ class MemoryRouter:
             "relationship",
         ],
 
-        # NEW — family, origin, self-facts
         "family": [
             "childhood",
             "identity",
@@ -86,11 +86,13 @@ class MemoryRouter:
             "relationship",
         ],
 
+        # Love now pulls childhood — her parents' love story.
         "love": [
             "relationship",
             "emotion",
             "identity",
             "social",
+            "childhood",
         ],
 
         "deep_self": [
@@ -143,9 +145,6 @@ class MemoryRouter:
         # --------------------------------------------------------
         # MEMORY
         # --------------------------------------------------------
-        # Redundant patterns removed:
-        #   "\bdo you remember\b" is covered by "\bremember\b"
-        #   "\bdo you recall\b"   is covered by "\brecall\b"
 
         "memory": [
             r"\bremember\b",
@@ -167,9 +166,6 @@ class MemoryRouter:
         # --------------------------------------------------------
         # FAMILY / ORIGIN
         # --------------------------------------------------------
-        # NEW — questions about family, siblings, parents, roots.
-        # Ensures childhood memories surface when Ruby is asked
-        # about her past. Without this she invents.
 
         "family": [
             r"\bsiblings?\b",
@@ -195,6 +191,9 @@ class MemoryRouter:
             r"\bgrew up\b",
             r"\braised\b",
             r"\bchildhood\b",
+
+            # Father's name — Addie
+            r"\baddie\b",
         ],
 
         # --------------------------------------------------------
@@ -251,9 +250,10 @@ class MemoryRouter:
         # --------------------------------------------------------
         # LOVE / RELATIONSHIP
         # --------------------------------------------------------
+        # "love" in any form pulls childhood — her parents' love story.
 
         "love": [
-            r"\bi\s+love\s+you\b",
+            r"\blov(e|ed|es|ing)\b",
             r"\bi\s+like\s+you\b",
             r"\bi\s+miss\s+you\b",
             r"\bi\s+need\s+you\b",
@@ -345,7 +345,7 @@ class MemoryRouter:
         "topic": 1,
         "emotional": 2,
         "memory": 3,
-        "family": 3,          # NEW
+        "family": 3,
         "identity": 3,
         "reflective": 3,
         "love": 4,
