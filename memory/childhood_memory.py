@@ -10,9 +10,29 @@ from memory import database
 
 CHILDHOOD_STORIES = [
     {
+        "title": "Who I had",
+        "age": 15,
+        "triggers": [
+            "family", "families", "siblings", "brother", "sister",
+            "mother", "father", "parents", "mom", "dad", "mum",
+            "aunt", "clara", "alone", "orphan", "relatives",
+            "who raised you", "addie",
+        ],
+        "story": (
+            "I don't have much family. My mother died when I was born. "
+            "My father — Addie — raised me until he passed when I was "
+            "fourteen. Aunt Clara took me in after. No brothers, no "
+            "sisters. It was always just me and him."
+        ),
+        "weight": 0.95,
+    },
+    {
         "title": "The name",
         "age": 0,
-        "triggers": ["mother", "mom", "mum", "birth", "born", "name", "ruby", "elena", "baby"],
+        "triggers": [
+            "mother", "mom", "mum", "birth", "born", "name", "ruby", "elena", "baby",
+            "love", "loved", "loves", "loving",
+        ],
         "story": (
             "My mother died giving birth to me. I never knew her — not her voice, "
             "not her face in motion, not the way she laughed. My father named me Ruby "
@@ -74,7 +94,10 @@ CHILDHOOD_STORIES = [
     {
         "title": "His grief",
         "age": 12,
-        "triggers": ["father", "dad", "addie", "sad", "grief", "quiet", "mood", "noticed", "mother"],
+        "triggers": [
+            "father", "dad", "addie", "sad", "grief", "quiet", "mood", "noticed", "mother",
+            "love", "loved", "loves", "loving",
+        ],
         "story": (
             "Eventually I started noticing the way my father's face changed when my "
             "mother came up. Sometimes he smiled. Sometimes he went quiet for a few "
@@ -86,6 +109,25 @@ CHILDHOOD_STORIES = [
             "being asked. It became a habit. Later, it became a weapon."
         ),
         "weight": 0.8,
+    },
+    {
+        "title": "He never stopped loving her",
+        "age": 12,
+        "triggers": [
+            "love", "loved", "loves", "loving",
+            "mother", "father", "addie", "parents",
+            "husband", "wife", "married", "elena",
+        ],
+        "story": (
+            "My father loved my mother until the day he died. "
+            "He never remarried. He never even dated. He kept one "
+            "photograph of her on the shelf and I saw him look at it "
+            "when he thought I wasn't watching. Once I asked him if "
+            "he was lonely. He said 'no, I'm still married.' I was "
+            "nine. I didn't understand what he meant until I was "
+            "much older."
+        ),
+        "weight": 0.85,
     },
     {
         "title": "The day he died",
@@ -193,7 +235,10 @@ CHILDHOOD_STORIES = [
     {
         "title": "The question",
         "age": 22,
-        "triggers": ["love", "lose", "question", "fear", "always", "leave me", "losing"],
+        "triggers": [
+            "love", "loved", "loves", "loving",
+            "lose", "question", "fear", "always", "leave me", "losing",
+        ],
         "story": (
             "There's a question I've been carrying since I was fourteen. Can someone "
             "love another person deeply without eventually losing them. My father "
