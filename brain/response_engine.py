@@ -15,7 +15,6 @@ from cognition.curiosity import Curiosity
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
 
-# V1.9 — routing + story cache
 try:
     from brain.memory_router import get_memory_router
     ROUTER_AVAILABLE = True
@@ -32,7 +31,6 @@ except Exception as e:
     STORY_CACHE_AVAILABLE = False
     get_story_cache = None
 
-# V1.5 — optional
 try:
     from evolution.development_engine import DevelopmentEngine
     EVOLUTION_AVAILABLE = True
@@ -41,7 +39,6 @@ except Exception as e:
     EVOLUTION_AVAILABLE = False
     DevelopmentEngine = None
 
-# V1.6 — optional
 try:
     from integrations.integration_engine import IntegrationEngine
     INTEGRATIONS_AVAILABLE = True
@@ -50,7 +47,6 @@ except Exception as e:
     INTEGRATIONS_AVAILABLE = False
     IntegrationEngine = None
 
-# V1.7 — optional
 try:
     from web import Browser, WebLearning, KnowledgeIngestion
     WEB_AVAILABLE = True
@@ -82,7 +78,6 @@ class ResponseEngine:
         self.learning = LearningEngine(user_name=user_name)
         self.personality = PersonalityDevelopment(user_name=user_name)
 
-        # V1.5
         if EVOLUTION_AVAILABLE:
             try:
                 self.evolution = DevelopmentEngine(user_name=user_name)
@@ -92,7 +87,6 @@ class ResponseEngine:
         else:
             self.evolution = None
 
-        # V1.6
         if INTEGRATIONS_AVAILABLE:
             try:
                 self.integrations = IntegrationEngine(user_name=user_name)
@@ -102,7 +96,6 @@ class ResponseEngine:
         else:
             self.integrations = None
 
-        # V1.7
         if WEB_AVAILABLE:
             try:
                 self.web_learning = WebLearning()
@@ -115,7 +108,6 @@ class ResponseEngine:
             self.web_learning = None
             self.web_knowledge = None
 
-        # V1.9 — Router + StoryCache
         if ROUTER_AVAILABLE:
             try:
                 self.router = get_memory_router(user_name=user_name)
@@ -138,7 +130,7 @@ class ResponseEngine:
             self.story_cache = None
 
     # ============================================================
-    # V1.8 — FAST PATH
+    # FAST PATH
     # ============================================================
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
         try:
@@ -163,12 +155,9 @@ class ResponseEngine:
         return reply
 
     # ============================================================
-    # FULL PATH (System 2) — router-aware
+    # FULL PATH
     # ============================================================
     def respond(self, user_message: str, ruby_prompt: str) -> str:
-        # --------------------------------------------------------
-        # Ruby notices what she's curious about
-        # --------------------------------------------------------
         try:
             self.curiosity.notice(user_message)
         except Exception as e:
@@ -179,9 +168,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ learning.pre_turn failed: {e}")
 
-        # --------------------------------------------------------
-        # V1.9 — retrieval plan
-        # --------------------------------------------------------
         plan = {"read_layers": [], "layers": [], "triggers": []}
         if self.router is not None:
             try:
@@ -200,53 +186,41 @@ class ResponseEngine:
             }
 
         # --------------------------------------------------------
-        # 1. CONTEXT (reads only)
+        # 1. CONTEXT
         # --------------------------------------------------------
         context = ""
 
-        # Episodic / relationship
         if "episodic" in read_layers or "relationship" in read_layers:
             try:
                 context = self.memory.build_context(user_message)
             except Exception as e:
                 print(f"⚠️ memory.build_context failed: {e}")
 
-        # Childhood — story cache first
+        # Childhood — StoryCache DISABLED, NO LIMIT
         childhood_used = False
         if "childhood" in read_layers:
-            cached = None
-            if self.story_cache is not None:
-                try:
-                    cached = self.story_cache.lookup(user_message, layer="childhood")
-                except Exception as e:
-                    print(f"⚠️ story cache lookup failed: {e}")
-                    cached = None
+            # StoryCache lookup disabled — was feeding back simplified replies
+            # if self.story_cache is not None:
+            #     try:
+            #         cached = self.story_cache.lookup(user_message, layer="childhood")
+            #     except Exception as e:
+            #         print(f"⚠️ story cache lookup failed: {e}")
+            #         cached = None
 
-            if cached and cached.get("mode") == "hit":
-                self.short_term.add("user", user_message)
-                self.short_term.add("assistant", cached["story"])
-                return cached["story"]
+            try:
+                childhood_line = self.childhood.build_context(user_message, limit=None)
+                if childhood_line:
+                    context = f"{context}\n\n{childhood_line}"
+                    childhood_used = True
+            except Exception as e:
+                print(f"⚠️ childhood.build_context failed: {e}")
 
-            if cached and cached.get("mode") == "soft":
-                context = f"{context}\n\nPreviously told:\n{cached['story']}"
-                childhood_used = True
-            else:
-                try:
-                    childhood_line = self.childhood.build_context(user_message, limit=2)
-                    if childhood_line:
-                        context = f"{context}\n\n{childhood_line}"
-                        childhood_used = True
-                except Exception as e:
-                    print(f"⚠️ childhood.build_context failed: {e}")
-
-        # Dev / body-mood
         try:
             inner_line = self.dev.describe()
             context = f"{context}\n\nYour body and mood: {inner_line}"
         except Exception as e:
             print(f"⚠️ dev.describe failed: {e}")
 
-        # Emotion
         if "emotion" in read_layers:
             try:
                 emotions = self.emotion.get_all()
@@ -255,7 +229,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ emotion.describe failed: {e}")
 
-        # Identity
         if "identity" in read_layers:
             try:
                 identity_line = self.identity.describe()
@@ -263,7 +236,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ identity.describe failed: {e}")
 
-        # Social
         if "social" in read_layers:
             try:
                 social_line = self.social.describe()
@@ -271,7 +243,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ social.describe failed: {e}")
 
-        # Motivation
         if "motivation" in read_layers:
             try:
                 drive_line = self.motivation.describe()
@@ -279,7 +250,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ motivation.describe failed: {e}")
 
-        # Personality
         if "personality" in read_layers:
             try:
                 personality_line = self.personality.describe()
@@ -287,7 +257,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ personality.describe failed: {e}")
 
-        # V1.9 — her direction of growth (goals)
         if ("motivation" in read_layers or "identity" in read_layers) and getattr(self.dev, "goals", None) is not None:
             try:
                 goals_line = self.dev.goals.describe()
@@ -296,7 +265,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ goals.describe failed: {e}")
 
-        # Evolution
         if self.evolution and (
             "identity" in read_layers or "personality" in read_layers
         ):
@@ -307,7 +275,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ evolution.describe failed: {e}")
 
-        # Pinecone semantic memory
         if self.integrations and "relationship" in read_layers:
             try:
                 semantic_line = self.integrations.build_context(user_message)
@@ -316,7 +283,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ integrations.build_context failed: {e}")
 
-        # Web knowledge
         if self.web_knowledge and "web" in read_layers:
             try:
                 web_hits = self.web_knowledge.search(user_message, limit=3)
@@ -330,7 +296,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ web search failed: {e}")
 
-        # Learning
         if "learning" in read_layers:
             try:
                 learning_line = self.learning.describe()
@@ -339,9 +304,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ learning.describe failed: {e}")
 
-        # --------------------------------------------------------
-        # V1.9 — What Ruby is curious about
-        # --------------------------------------------------------
         try:
             strong = self.curiosity.strongest()
             if strong and strong.get("strength", 0) >= 0.55:
@@ -357,7 +319,7 @@ class ResponseEngine:
             print(f"⚠️ curiosity context failed: {e}")
 
         # --------------------------------------------------------
-        # 2. COGNITION — side effect always runs
+        # 2. COGNITION
         # --------------------------------------------------------
         trace = None
         try:
@@ -379,7 +341,7 @@ class ResponseEngine:
             print(f"⚠️ cognition.process failed: {e}")
 
         # --------------------------------------------------------
-        # FORMAT PROMPT — supports both {user_name} and {context}
+        # FORMAT PROMPT
         # --------------------------------------------------------
         try:
             base_prompt = ruby_prompt.format(user_name=self.user_name, context=context or "")
@@ -408,7 +370,7 @@ class ResponseEngine:
         self.memory.process(user_message, reply)
 
         # --------------------------------------------------------
-        # STATE UPDATES — always run
+        # STATE UPDATES
         # --------------------------------------------------------
         try:
             self.dev.tick()
@@ -540,9 +502,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ learning.post_turn failed: {e}")
 
-        # --------------------------------------------------------
-        # V1.9 — goals
-        # --------------------------------------------------------
         if getattr(self.dev, "goals", None) is not None:
             try:
                 if trace is not None:
@@ -550,19 +509,16 @@ class ResponseEngine:
                     for topic in focused.keys():
                         if topic and len(topic) > 3:
                             self.dev.goals.observe(topic, weight=1)
-
                 self.dev.goals.reinforce_seed(0.003)
             except Exception as e:
                 print(f"⚠️ goals.observe failed: {e}")
 
-        # --------------------------------------------------------
-        # V1.9 — story cache store
-        # --------------------------------------------------------
-        if childhood_used and self.story_cache is not None:
-            try:
-                self.story_cache.store(user_message, reply, layer="childhood")
-            except Exception as e:
-                print(f"⚠️ story cache store failed: {e}")
+        # StoryCache store disabled — see lookup block above
+        # if childhood_used and self.story_cache is not None:
+        #     try:
+        #         self.story_cache.store(user_message, reply, layer="childhood")
+        #     except Exception as e:
+        #         print(f"⚠️ story cache store failed: {e}")
 
         return reply
 
