@@ -11,7 +11,11 @@
 # Semantic similarity is not treated as proof that two situations
 # are identical. Verbatim reuse therefore requires a high threshold
 # plus basic metadata checks.
+#
+# V1.9.1 — also filters hallucinated control tags so Ruby never
+# re-learns her own broken output.
 
+import re
 from typing import Optional, Dict, Any
 
 
@@ -41,20 +45,20 @@ class StoryCache:
     # THRESHOLDS
     # ============================================================
 
-    # Very strong semantic match.
     HIT_THRESHOLD = 0.92
-
-    # Related enough to provide as context.
     SOFT_THRESHOLD = 0.80
-
-    # Ignore tiny replies.
     MIN_STORY_LEN = 40
-
-    # Maximum story supplied back into context.
     MAX_STORY_LEN = 2500
-
-    # Pinecone category.
     CATEGORY = "told_memory"
+
+    # ============================================================
+    # TAG FILTER
+    # ============================================================
+    # Matches [GENERATE_IMAGE: ...], [SAVE_MEMORY: ...], [TAG], etc.
+    # Anything in square brackets that looks like a control tag.
+
+    _TAG_PATTERN = re.compile(r"\[[A-Za-z_]+:[^\]]*\]")
+    _BARE_TAG_PATTERN = re.compile(r"\[[A-Za-z_]+\]")
 
     # ============================================================
     # INITIALIZATION
@@ -77,32 +81,6 @@ class StoryCache:
         query: str,
         layer: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """
-        Find a previously rendered story.
-
-        Returns:
-
-            {
-                "mode": "hit",
-                "story": "...",
-                "score": 0.94,
-                "layer": "childhood"
-            }
-
-        or:
-
-            {
-                "mode": "soft",
-                "story": "...",
-                "score": 0.84,
-                "layer": "childhood"
-            }
-
-        or None.
-
-        `layer` is optional so older callers remain compatible.
-        """
-
         if not self._available():
             return None
 
@@ -139,16 +117,8 @@ class StoryCache:
             if not story:
                 continue
 
-            # ----------------------------------------------------
-            # Strong match
-            # ----------------------------------------------------
-
             if score >= self.HIT_THRESHOLD:
-                print(
-                    f"🎯 story cache HIT "
-                    f"(score={score:.2f})"
-                )
-
+                print(f"🎯 story cache HIT (score={score:.2f})")
                 return {
                     "mode": "hit",
                     "story": story,
@@ -156,32 +126,18 @@ class StoryCache:
                     "layer": self._get_layer(match),
                 }
 
-            # ----------------------------------------------------
-            # Soft match
-            # ----------------------------------------------------
-
             if score >= self.SOFT_THRESHOLD:
-
                 candidate = {
                     "mode": "soft",
                     "story": story,
                     "score": score,
                     "layer": self._get_layer(match),
                 }
-
-                # Keep only the strongest soft match.
-                if (
-                    best_soft is None
-                    or score > best_soft["score"]
-                ):
+                if best_soft is None or score > best_soft["score"]:
                     best_soft = candidate
 
         if best_soft:
-            print(
-                f"🟡 story cache SOFT "
-                f"(score={best_soft['score']:.2f})"
-            )
-
+            print(f"🟡 story cache SOFT (score={best_soft['score']:.2f})")
             return best_soft
 
         return None
@@ -195,18 +151,6 @@ class StoryCache:
         query: str,
         layer: Optional[str],
     ):
-        """
-        Search Pinecone.
-
-        If the PineconeMemory implementation supports metadata
-        filtering, use it.
-
-        Otherwise fall back to the existing search API and filter
-        results locally.
-        """
-
-        # Preferred API:
-        # search(query, limit=5, filter={...})
         if layer:
             try:
                 return self.pinecone.search(
@@ -218,23 +162,16 @@ class StoryCache:
                     },
                 )
             except TypeError:
-                # Older PineconeMemory doesn't support filter.
                 pass
 
         try:
             return self.pinecone.search(
                 query,
                 limit=8,
-                filter={
-                    "category": self.CATEGORY,
-                },
+                filter={"category": self.CATEGORY},
             )
         except TypeError:
-            # Compatibility with current implementation.
-            return self.pinecone.search(
-                query,
-                limit=8,
-            )
+            return self.pinecone.search(query, limit=8)
 
     # ============================================================
     # MATCH VALIDATION
@@ -245,28 +182,15 @@ class StoryCache:
         match: Dict[str, Any],
         requested_layer: Optional[str],
     ) -> bool:
-        """
-        Validate metadata before considering similarity.
-
-        This prevents unrelated Pinecone memories from becoming
-        story-cache candidates.
-        """
-
-        category = str(
-            match.get("category", "")
-        ).strip().lower()
+        category = str(match.get("category", "")).strip().lower()
 
         if category != self.CATEGORY:
             return False
 
-        # If caller requested a specific memory layer, prefer
-        # stories from that layer.
         if requested_layer:
             stored_layer = self._get_layer(match)
-
-            if stored_layer:
-                if stored_layer != requested_layer:
-                    return False
+            if stored_layer and stored_layer != requested_layer:
+                return False
 
         return True
 
@@ -280,9 +204,29 @@ class StoryCache:
             score = float(match.get("score", 0))
         except (TypeError, ValueError):
             return 0.0
-
-        # Protect against malformed similarity values.
         return max(0.0, min(score, 1.0))
+
+    # ============================================================
+    # TAG STRIPPING
+    # ============================================================
+
+    @classmethod
+    def _strip_tags(cls, text: str) -> str:
+        if not text:
+            return ""
+        text = cls._TAG_PATTERN.sub("", text)
+        text = cls._BARE_TAG_PATTERN.sub("", text)
+        text = " ".join(text.split()).strip()
+        return text
+
+    @classmethod
+    def _has_tags(cls, text: str) -> bool:
+        if not text:
+            return False
+        return bool(
+            cls._TAG_PATTERN.search(text)
+            or cls._BARE_TAG_PATTERN.search(text)
+        )
 
     # ============================================================
     # STORY EXTRACTION
@@ -300,14 +244,15 @@ class StoryCache:
 
         story = str(story).strip()
 
+        # Strip any hallucinated tags from cached stories
+        story = self._strip_tags(story)
+
         if len(story) < self.MIN_STORY_LEN:
             return ""
 
-        # Prevent huge cached responses from consuming the prompt.
         if len(story) > self.MAX_STORY_LEN:
             story = story[:self.MAX_STORY_LEN].rstrip()
 
-        # Never feed obvious error messages back into Ruby.
         if self._is_error_reply(story):
             return ""
 
@@ -325,12 +270,10 @@ class StoryCache:
 
         if isinstance(metadata, dict):
             layer = metadata.get("layer")
-
             if layer:
                 return str(layer)
 
         layer = match.get("layer")
-
         if layer:
             return str(layer)
 
@@ -352,10 +295,7 @@ class StoryCache:
             "[error]",
         )
 
-        return any(
-            marker in low
-            for marker in error_markers
-        )
+        return any(marker in low for marker in error_markers)
 
     # ============================================================
     # AVAILABILITY
@@ -364,11 +304,8 @@ class StoryCache:
     def _available(self) -> bool:
         if not self.pinecone:
             return False
-
         try:
-            return bool(
-                self.pinecone.is_enabled()
-            )
+            return bool(self.pinecone.is_enabled())
         except Exception:
             return False
 
@@ -382,14 +319,6 @@ class StoryCache:
         story: str,
         layer: str = "memory",
     ) -> bool:
-        """
-        Save a rendered story.
-
-        The original user query is stored as the semantic key,
-        while Ruby's actual rendered response is stored as the
-        reusable story.
-        """
-
         if not self._available():
             return False
 
@@ -401,6 +330,11 @@ class StoryCache:
 
         story = story.strip()
 
+        # Block hallucinated control tags from being cached
+        if self._has_tags(story):
+            print("🚫 blocked tagged story from cache")
+            return False
+
         if self._is_error_reply(story):
             return False
 
@@ -411,8 +345,6 @@ class StoryCache:
         )
 
         try:
-            # Keep compatibility with the existing PineconeMemory
-            # API while passing layer information when supported.
             try:
                 self.pinecone.store(
                     user_message=query.strip(),
@@ -421,9 +353,7 @@ class StoryCache:
                     importance=4,
                     layer=layer,
                 )
-
             except TypeError:
-                # Older PineconeMemory without `layer=`.
                 self.pinecone.store(
                     user_message=query.strip(),
                     ruby_reply=story,
@@ -431,11 +361,7 @@ class StoryCache:
                     importance=4,
                 )
 
-            print(
-                f"💾 story cached "
-                f"({len(story)} chars, layer={layer})"
-            )
-
+            print(f"💾 story cached ({len(story)} chars, layer={layer})")
             return True
 
         except Exception as e:
