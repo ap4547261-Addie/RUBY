@@ -1,4 +1,5 @@
 from llama_cpp import Llama
+import re
 
 
 class LocalBrain:
@@ -44,6 +45,18 @@ class LocalBrain:
         return self.model is not None
 
     def _clean(self, reply: str, user_name: str) -> str:
+        # ------------------------------------------------------
+        # Strip hallucinated control tags.
+        # Qwen2.5 sometimes outputs things like:
+        #   [GENERATE_IMAGE: sunset over the city]
+        #   [SAVE_MEMORY: father reading stories]
+        #   [ADD_MEMORY: ...]
+        # These are NOT meant to be spoken. Remove them all.
+        # ------------------------------------------------------
+        reply = re.sub(r"\[[A-Za-z_]+:[^\]]*\]", "", reply)
+        reply = re.sub(r"\[[A-Za-z_]+\]", "", reply)
+        reply = " ".join(reply.split()).strip()
+
         reply = reply.replace("**", "").replace("*", "").strip()
 
         if reply.lower().startswith("ruby:"):
