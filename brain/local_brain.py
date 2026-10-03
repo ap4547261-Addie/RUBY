@@ -15,7 +15,7 @@ class LocalBrain:
                 model_path=model_path,
 
                 # Context window
-                n_ctx=4096,
+                n_ctx=131072,
 
                 # CPU threads
                 n_threads=6,
