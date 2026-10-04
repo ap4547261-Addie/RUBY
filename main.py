@@ -28,7 +28,7 @@ def main(page: ft.Page):
     settings = SettingsManager()
     
     # Initialize the single, persistent Curiosity Engine
-    curiosity = Curiosity(memory_file="ruby_memory.json")
+    curiosity = Curiosity()
 
     user_name = settings.get("user_name", "not_set")
     
