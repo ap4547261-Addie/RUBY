@@ -12,7 +12,7 @@ from brain.system2 import System2
 from prompts.ruby_prompt import build_ruby_prompt
 from settings.settings_manager import SettingsManager
 from tools.ws_server import WSServer
-from brain.curiosity import Curiosity  # Ensure this path matches where you saved curiosity.py
+from cognition.curiosity import Curiosity# Ensure this path matches where you saved curiosity.py
 
 
 def main(page: ft.Page):
