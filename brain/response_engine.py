@@ -1,4 +1,4 @@
-# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache + Goals + Curiosity)
+# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache + Goals + Synced Curiosity)
 
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
@@ -59,7 +59,7 @@ except Exception as e:
 
 
 class ResponseEngine:
-    def __init__(self, brain, user_name="not_set", platform="private"):
+    def __init__(self, brain, user_name="not_set", platform="private", curiosity=None):
         self.brain = brain
         self.user_name = user_name
         self.platform = platform
@@ -74,7 +74,10 @@ class ResponseEngine:
         self.reflection = ReflectionEngine(user_name=user_name)
         self.motivation = MotivationEngine(user_name=user_name, platform=platform)
         self.cognition = CognitionEngine(user_name=user_name)
-        self.curiosity = Curiosity()
+        
+        # Use the shared curiosity instance passed from main.py
+        self.curiosity = curiosity if curiosity is not None else Curiosity()
+        
         self.learning = LearningEngine(user_name=user_name)
         self.personality = PersonalityDevelopment(user_name=user_name)
 
@@ -133,13 +136,13 @@ class ResponseEngine:
     # FAST PATH
     # ============================================================
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
-        try:
-            description = ruby_prompt.format(user_name=self.user_name, context="")
-        except Exception:
+        if "{context}" in ruby_prompt:
             try:
-                description = ruby_prompt.format(user_name=self.user_name)
+                description = ruby_prompt.format(user_name=self.user_name, context="")
             except Exception:
                 description = ruby_prompt
+        else:
+            description = ruby_prompt
 
         self.short_term.add("user", user_message)
         try:
@@ -158,6 +161,7 @@ class ResponseEngine:
     # FULL PATH
     # ============================================================
     def respond(self, user_message: str, ruby_prompt: str) -> str:
+        # 1. Feed the message to the synced Curiosity Engine
         try:
             self.curiosity.notice(user_message)
         except Exception as e:
@@ -196,17 +200,8 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ memory.build_context failed: {e}")
 
-        # Childhood — StoryCache DISABLED, NO LIMIT
         childhood_used = False
         if "childhood" in read_layers:
-            # StoryCache lookup disabled — was feeding back simplified replies
-            # if self.story_cache is not None:
-            #     try:
-            #         cached = self.story_cache.lookup(user_message, layer="childhood")
-            #     except Exception as e:
-            #         print(f"⚠️ story cache lookup failed: {e}")
-            #         cached = None
-
             try:
                 childhood_line = self.childhood.build_context(user_message, limit=None)
                 if childhood_line:
@@ -304,16 +299,30 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ learning.describe failed: {e}")
 
+        # --- CURIOSITY CONTEXT GENERATION ---
+        curiosity_instruction = ""
+        try:
+            if self.curiosity.should_ask():
+                ctx = self.curiosity.get_ask_context()
+                if ctx:
+                    curiosity_instruction = (
+                        f"Trigger: {ctx['subject']}\n"
+                        f"Reason: {ctx['reason']}\n"
+                        f"Instruction: {ctx['instruction']}"
+                    )
+                    self.curiosity.mark_explored(ctx['subject'], ctx['category'])
+                    print(f"🔍 Curiosity Triggered inside Engine: {ctx['subject']}")
+        except Exception as e:
+            print(f"⚠️ curiosity context generation failed: {e}")
+
         try:
             strong = self.curiosity.strongest()
             if strong and strong.get("strength", 0) >= 0.55:
                 lines = ["Things you've been noticing you don't fully understand:"]
                 lines.append(f"- {strong['subject']} ({strong['reason']})")
-
                 for u in self.curiosity.peek_unknowns()[:2]:
                     if u.get("strength", 0) >= 0.55 and u["subject"] != strong["subject"]:
                         lines.append(f"- {u['subject']}")
-
                 context = f"{context}\n\n" + "\n".join(lines)
         except Exception as e:
             print(f"⚠️ curiosity context failed: {e}")
@@ -341,30 +350,34 @@ class ResponseEngine:
             print(f"⚠️ cognition.process failed: {e}")
 
         # --------------------------------------------------------
-        # FORMAT PROMPT
+        # FORMAT PROMPT (Inject context and curiosity)
         # --------------------------------------------------------
-        try:
-            base_prompt = ruby_prompt.format(user_name=self.user_name, context=context or "")
-        except Exception:
+        if "{context}" in ruby_prompt:
             try:
-                base_prompt = ruby_prompt.format(user_name=self.user_name)
-                description = f"{base_prompt}\n\n{context}" if context else base_prompt
+                description = ruby_prompt.format(user_name=self.user_name, context=context or "")
             except Exception:
-                base_prompt = ruby_prompt
-                description = f"{base_prompt}\n\n{context}" if context else base_prompt
+                description = f"{ruby_prompt}\n\nWhat you know right now:\n{context}"
         else:
-            description = base_prompt
+            description = f"{ruby_prompt}\n\nWhat you know right now:\n{context}"
+
+        # Force-inject the curiosity instruction
+        if curiosity_instruction and "CURIOSITY ENGINE INSTRUCTION" not in description:
+            description += f"\n\nCURIOSITY ENGINE INSTRUCTION:\n{curiosity_instruction}"
 
         # --------------------------------------------------------
         # GENERATE
         # --------------------------------------------------------
         self.short_term.add("user", user_message)
 
-        reply = self.brain.generate(
-            description=description,
-            history=self.short_term.get_messages(),
-            user_name=self.user_name,
-        )
+        try:
+            reply = self.brain.generate(
+                description=description,
+                history=self.short_term.get_messages(),
+                user_name=self.user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ brain.generate failed: {e}")
+            reply = "[GENERATION ERROR] " + str(e)
 
         self.short_term.add("assistant", reply)
         self.memory.process(user_message, reply)
@@ -513,13 +526,7 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ goals.observe failed: {e}")
 
-        # StoryCache store disabled — see lookup block above
-        # if childhood_used and self.story_cache is not None:
-        #     try:
-        #         self.story_cache.store(user_message, reply, layer="childhood")
-        #     except Exception as e:
-        #         print(f"⚠️ story cache store failed: {e}")
-
+        # 6. Return the final reply!
         return reply
 
     def clear_short_term(self):
