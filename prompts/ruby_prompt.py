@@ -125,7 +125,6 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "", curiosity
     )
 
 
-RUBY_PROMPT = build_ruby_prompt(interaction_depth=1)
 
 
 def get_reference_path(filename: str = "RUBY_03.png") -> str:
