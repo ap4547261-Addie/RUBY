@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 
 
@@ -19,21 +20,22 @@ from datetime import datetime, timezone
 #   - why something is worth exploring
 #
 # Ruby's language model creates the actual question.
+#
+# 🚀 LIMITLESS VERSION: No hard limits on memory size. 
+# Ruby will retain all interests, unknowns, and history.
+# (Warning: Long-term runs may consume more memory over time)
 # ============================================================
 
 
 class Curiosity:
 
-    MAX_INTERESTS = 30
-    MAX_UNKNOWN = 40
-    MAX_UNCERTAINTIES = 20
-    MAX_HISTORY = 30
-
-    INTEREST_THRESHOLD = 0.55
-    ASK_THRESHOLD = 0.70
+    # 🔥 FIX 1: Lowered thresholds so Ruby actually acts on her curiosity
+    INTEREST_THRESHOLD = 0.50
+    ASK_THRESHOLD = 0.60
 
     def __init__(self):
         # In-memory only. No DB persistence for now.
+        # No capacity limits applied to these lists.
         self._interests = []
         self._unknowns = []
         self._uncertainties = []
@@ -53,6 +55,21 @@ class Curiosity:
 
         lower = text.lower()
 
+        # 🔥 FIX 2: Force curiosity if the user explicitly wants to be asked questions
+        if re.search(r"\b(ask me|know about me|get to know me|what do you want to know about me)\b", lower):
+            self._add_interest(
+                category="person",
+                subject="the user's identity",
+                reason="The user explicitly wants Ruby to ask them questions.",
+                strength=0.95
+            )
+            self._add_unknown(
+                category="person",
+                subject="the user's background",
+                reason="Ruby needs to ask the user about themselves.",
+                strength=0.95
+            )
+
         self._notice_person_information(text, lower)
         self._notice_people(text, lower)
         self._notice_places(text, lower)
@@ -67,23 +84,14 @@ class Curiosity:
     # ========================================================
 
     def _notice_person_information(self, text, lower):
-        if (
-            "my name is " in lower
-            or "call me " in lower
-            or lower.startswith("i'm ")
-        ):
+        # 🔥 FIX 3: Using Regex for more flexible matching
+        if re.search(r"\b(my name is|call me|i'm [a-z]+)\b", lower):
             self._resolve_unknown(category="person", subject="identity")
 
-        if any(phrase in lower for phrase in (
-            "i study", "i'm studying", "i am studying",
-            "i work", "my job", "my college", "my school",
-        )):
+        if re.search(r"\b(i study|i'm studying|i am studying|i work|my job|my college|my school)\b", lower):
             self._resolve_unknown(category="person", subject="what they do")
 
-        if any(phrase in lower for phrase in (
-            "my family", "my mother", "my mom", "my father",
-            "my dad", "my brother", "my sister", "my parents",
-        )):
+        if re.search(r"\b(my family|my mother|my mom|my father|my dad|my brother|my sister|my parents)\b", lower):
             self._resolve_unknown(category="person", subject="family")
             self._add_interest(
                 category="person",
@@ -92,9 +100,7 @@ class Curiosity:
                 strength=0.62,
             )
 
-        if any(phrase in lower for phrase in (
-            "my friend", "my friends", "my best friend",
-        )):
+        if re.search(r"\b(my friend|my friends|my best friend)\b", lower):
             self._resolve_unknown(category="person", subject="friends")
             self._add_interest(
                 category="person",
@@ -114,7 +120,7 @@ class Curiosity:
             "classmate", "teacher", "colleague",
             "girlfriend", "boyfriend",
         )
-        if any(word in lower for word in relationship_words):
+        if any(re.search(rf"\b{word}\b", lower) for word in relationship_words):
             self._add_interest(
                 category="people",
                 subject="person mentioned",
@@ -133,12 +139,8 @@ class Curiosity:
     # ========================================================
 
     def _notice_places(self, text, lower):
-        movement_words = (
-            "i went to", "i'm going to", "i am going to",
-            "i visited", "i've been to", "i was at",
-            "i came from", "i traveled to", "i travelled to",
-        )
-        if any(phrase in lower for phrase in movement_words):
+        # 🔥 FIX 3: Broader regex matching for movement
+        if re.search(r"\b(i went to|i'm going to|i am going to|i visited|i've been to|i was at|i came from|i traveled to|i travelled to)\b", lower):
             self._add_interest(
                 category="event",
                 subject="place",
@@ -174,7 +176,7 @@ class Curiosity:
             "this morning", "this evening", "one time",
             "recently", "then", "after that",
         )
-        if any(marker in lower for marker in event_markers):
+        if any(re.search(rf"\b{marker}\b", lower) for marker in event_markers):
             self._add_interest(
                 category="event",
                 subject="recent experience",
@@ -193,13 +195,8 @@ class Curiosity:
     # ========================================================
 
     def _notice_plans(self, text, lower):
-        future_markers = (
-            "i want to", "i'm planning to", "i am planning to",
-            "i'm going to", "i am going to", "i hope to",
-            "i'd like to", "i would like to",
-            "someday", "in the future",
-        )
-        if any(marker in lower for marker in future_markers):
+        # 🔥 FIX 3: Regex to catch different future phrasings
+        if re.search(r"\b(i want to|i'm planning to|i am planning to|i'm going to|i am going to|i hope to|i'd like to|i would like to|someday|in the future)\b", lower):
             self._add_interest(
                 category="future",
                 subject="their plan",
@@ -218,12 +215,8 @@ class Curiosity:
     # ========================================================
 
     def _notice_emotion(self, text, lower):
-        emotion_markers = (
-            "i'm happy", "i am happy", "i'm sad", "i am sad",
-            "i'm angry", "i am angry", "i'm scared", "i am scared",
-            "i'm worried", "i am worried", "i feel", "i felt",
-        )
-        if any(marker in lower for marker in emotion_markers):
+        # 🔥 FIX 3: Regex matching for emotional states
+        if re.search(r"\b(i'm happy|i am happy|i'm sad|i am sad|i'm angry|i am angry|i'm scared|i am scared|i'm worried|i am worried|i feel|i felt)\b", lower):
             self._add_interest(
                 category="emotion",
                 subject="their emotional experience",
@@ -241,7 +234,7 @@ class Curiosity:
             "as a child", "my childhood", "years ago",
             "back then", "i remember",
         )
-        if any(marker in lower for marker in experience_markers):
+        if any(re.search(rf"\b{marker}\b", lower) for marker in experience_markers):
             self._add_interest(
                 category="experience",
                 subject="past experience",
@@ -260,11 +253,8 @@ class Curiosity:
     # ========================================================
 
     def _notice_beliefs(self, text, lower):
-        belief_markers = (
-            "i believe", "i think", "in my opinion",
-            "i feel like people", "i don't believe", "i dont believe",
-        )
-        if any(marker in lower for marker in belief_markers):
+        # 🔥 FIX 3: Regex for beliefs
+        if re.search(r"\b(i believe|i think|in my opinion|i feel like people|i don't believe|i dont believe)\b", lower):
             self._add_interest(
                 category="belief",
                 subject="their perspective",
@@ -293,7 +283,6 @@ class Curiosity:
             "strength": strength,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        self._trim(self._interests, self.MAX_INTERESTS)
 
     # ========================================================
     # ADD UNKNOWN
@@ -316,7 +305,6 @@ class Curiosity:
             "strength": strength,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        self._trim(self._unknowns, self.MAX_UNKNOWN)
 
     # ========================================================
     # UNCERTAINTY
@@ -349,7 +337,6 @@ class Curiosity:
             "strength": strength,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        self._trim(self._uncertainties, self.MAX_UNCERTAINTIES)
 
     # ========================================================
     # STRONGEST CURIOSITY
@@ -418,11 +405,12 @@ class Curiosity:
             "subject": strongest["subject"],
             "reason": strongest["reason"],
             "strength": strongest["strength"],
+            # 🔥 FIX 4: Force the LLM to take the lead and prevent the deflection loop
             "instruction": (
-                "Ruby wants to understand this naturally. "
-                "Generate a conversational question from the "
-                "current conversation. Do not use a predefined "
-                "question."
+                f"Ruby's curiosity engine has detected a strong topic: '{strongest['subject']}'. "
+                "You MUST ask a specific, natural follow-up question about this right now. "
+                "You are FORBIDDEN from saying 'What would you like to know about me?' or deferring the conversation. "
+                "Take the lead, show genuine curiosity, and ask the user a question about their life or the topic they just mentioned."
             ),
         }
 
@@ -468,7 +456,6 @@ class Curiosity:
             "category": category,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        self._trim(self._history, self.MAX_HISTORY)
 
         for item in self._interests:
             if item["subject"].lower() == subject.lower():
@@ -556,8 +543,3 @@ class Curiosity:
     @staticmethod
     def _clamp(value):
         return max(0.0, min(1.0, float(value)))
-
-    @staticmethod
-    def _trim(items, maximum):
-        while len(items) > maximum:
-            items.pop(0)
