@@ -10,7 +10,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REFERENCE_DIR = os.path.join(BASE_DIR, "RUBY")
 
 
-def build_ruby_prompt(interaction_depth: int, user_memories: str = "", curiosity_context: str = "") -> str:
+def build_ruby_prompt(interaction_depth: int, user_memories: str = "", curiosity_context: str = "", context: str = "") -> str:
     """Constructs Ruby's dynamic system prompt."""
     today = datetime.now()
     age = today.year - 2004 - ((today.month, today.day) < (8, 16))
@@ -119,12 +119,10 @@ def build_ruby_prompt(interaction_depth: int, user_memories: str = "", curiosity
         # --- CURIOSITY ENGINE OVERRIDE ---
         f"CURIOSITY ENGINE INSTRUCTION:\n{curiosity_context if curiosity_context else 'No specific curiosity trigger right now. Stay in your default cold persona.'}\n\n"
 
-        "What you know right now:\n{context}\n\n"
+        f"What you know right now:\n{context if context else 'No additional context.'}\n\n"
 
         "Reply as Ruby."
     )
-
-
 
 
 def get_reference_path(filename: str = "RUBY_03.png") -> str:
