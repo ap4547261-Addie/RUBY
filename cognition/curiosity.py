@@ -1,3 +1,5 @@
+import json
+import os
 import re
 from datetime import datetime, timezone
 
@@ -21,7 +23,7 @@ from datetime import datetime, timezone
 #
 # Ruby's language model creates the actual question.
 #
-# 🚀 LIMITLESS VERSION: No hard limits on memory size. 
+# 🚀 LIMITLESS VERSION: No hard limits on memory size.
 # Ruby will retain all interests, unknowns, and history.
 # (Warning: Long-term runs may consume more memory over time)
 # ============================================================
@@ -33,13 +35,79 @@ class Curiosity:
     INTEREST_THRESHOLD = 0.50
     ASK_THRESHOLD = 0.60
 
-    def __init__(self):
-        # In-memory only. No DB persistence for now.
-        # No capacity limits applied to these lists.
+    def __init__(self, memory_file=None):
+        self.memory_file = memory_file
         self._interests = []
         self._unknowns = []
         self._uncertainties = []
         self._history = []
+
+        if self.memory_file:
+            self.load_memory()
+
+    # ========================================================
+    # PERSISTENCE
+    # ========================================================
+
+    def _resolve_memory_path(self):
+        if not self.memory_file:
+            return None
+
+        storage_dir = os.getenv("FLET_APP_STORAGE_DATA")
+        if storage_dir:
+            try:
+                os.makedirs(storage_dir, exist_ok=True)
+                return os.path.join(storage_dir, self.memory_file)
+            except Exception:
+                pass
+
+        return os.path.abspath(self.memory_file)
+
+    def load_memory(self):
+        path = self._resolve_memory_path()
+        if not path or not os.path.exists(path):
+            return
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if not isinstance(data, dict):
+                return
+
+            self._interests = data.get("interests", []) or []
+            self._unknowns = data.get("unknowns", []) or []
+            self._uncertainties = data.get("uncertainties", []) or []
+            self._history = data.get("history", []) or []
+
+            print(f"📚 Curiosity memory restored from {path}")
+        except Exception as e:
+            print(f"⚠️ Curiosity memory load failed: {e}")
+
+    def save_memory(self):
+        path = self._resolve_memory_path()
+        if not path:
+            return False
+
+        try:
+            directory = os.path.dirname(path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+
+            payload = {
+                "interests": self._interests,
+                "unknowns": self._unknowns,
+                "uncertainties": self._uncertainties,
+                "history": self._history,
+            }
+
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False)
+
+            return True
+        except Exception as e:
+            print(f"⚠️ Curiosity memory save failed: {e}")
+            return False
 
     # ========================================================
     # NOTICE
@@ -535,6 +603,7 @@ class Curiosity:
         self._unknowns.clear()
         self._uncertainties.clear()
         self._history.clear()
+        self.save_memory()
 
     # ========================================================
     # HELPERS
@@ -543,3 +612,903 @@ class Curiosity:
     @staticmethod
     def _clamp(value):
         return max(0.0, min(1.0, float(value)))
+
+
+# ================================================================
+# BACKWARD-COMPATIBLE SINGLETON ACCESSOR
+# ================================================================
+
+_curiosity_instance = None
+
+
+def get_curiosity(memory_file=None):
+    global _curiosity_instance
+    if _curiosity_instance is None:
+        _curiosity_instance = Curiosity(memory_file=memory_file)
+    return _curiosity_instance
+
+
+# Backward compatibility: older code may do `Curiosity()` without args,
+# or `Curiosity(memory_file="...")` as used in main.py.
+# This class definition already supports both.
+
+
+# Optional: allow direct import of a singleton instance name for convenience.
+# Not required by the project, but harmless.
+
+
+"""Legacy module marker."""
+
+
+# The class above is the actual implementation.
+
+
+"""End of curiosity module."""
+
+
+# EOF
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+nn
