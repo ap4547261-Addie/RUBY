@@ -1,4 +1,4 @@
-# main.py - Ruby V1.9 (System 1/2 + Router + StoryCache + Goals + Lemur bridge)
+# main.py - Ruby V1.9 (System 1/2 + Router + StoryCache + Goals + Lemur bridge + Curiosity)
 
 import os
 import shutil
@@ -9,9 +9,10 @@ from brain.local_brain import LocalBrain
 from brain.response_engine import ResponseEngine
 from brain.system1 import System1
 from brain.system2 import System2
-from prompts.ruby_prompt import RUBY_PROMPT
+from prompts.ruby_prompt import build_ruby_prompt
 from settings.settings_manager import SettingsManager
 from tools.ws_server import WSServer
+from brain.curiosity import Curiosity  # Adjust to 'from curiosity import Curiosity' if it's in the root folder
 
 
 def main(page: ft.Page):
@@ -25,12 +26,16 @@ def main(page: ft.Page):
     # ----------------------------------------
     brain = LocalBrain()
     settings = SettingsManager()
+    
+    # Initialize the Curiosity Engine
+    curiosity = Curiosity(memory_file="ruby_memory.json")
 
     user_name = settings.get("user_name", "not_set")
     response_engine = ResponseEngine(brain, user_name=user_name, platform="private")
 
     system1 = System1(user_name=user_name)
-    system2 = System2(response_engine, ruby_prompt=RUBY_PROMPT)
+    # Removed static ruby_prompt. Passing "" as fallback in case System2 requires it.
+    system2 = System2(response_engine, ruby_prompt="")
 
     # ----------------------------------------
     # UI
@@ -847,6 +852,32 @@ def main(page: ft.Page):
             add_message("Ruby", "Load my brain first 😭 (⚙️)")
             return
 
+        # 1. Feed the message to the Curiosity Engine
+        curiosity.notice(msg)
+
+        # 2. Check if Ruby should ask a question and get the context
+        curiosity_context = ""
+        if curiosity.should_ask():
+            ctx = curiosity.get_ask_context()
+            if ctx:
+                curiosity_context = (
+                    f"Trigger: {ctx['subject']}\n"
+                    f"Reason: {ctx['reason']}\n"
+                    f"Instruction: {ctx['instruction']}"
+                )
+                # Mark it as explored so she doesn't spam the same question
+                curiosity.mark_explored(ctx['subject'], ctx['category'])
+                print(f"🔍 Curiosity Triggered: {ctx['subject']}")
+
+        # 3. Dynamically build the prompt with current depth and curiosity context
+        # Roughly count interactions from chat UI (2 messages per exchange)
+        interaction_depth = max(1, len(chat.controls) // 2)
+        dynamic_prompt = build_ruby_prompt(
+            interaction_depth=interaction_depth,
+            user_memories="", # You can pass formatted memories here if desired
+            curiosity_context=curiosity_context
+        )
+
         route = system1.classify(msg)
         print(f"🧭 System1 route: {route}")
 
@@ -859,9 +890,12 @@ def main(page: ft.Page):
         page.update()
 
         try:
+            # Inject the dynamic prompt into System 2 before calling it
+            system2.ruby_prompt = dynamic_prompt
+            
             if route == "trivial":
                 reply = await asyncio.to_thread(
-                    response_engine.respond_fast, msg, RUBY_PROMPT
+                    response_engine.respond_fast, msg, dynamic_prompt
                 )
             else:
                 reply = await asyncio.to_thread(
@@ -873,6 +907,10 @@ def main(page: ft.Page):
 
         status.value = "🧠 Ruby is ready."
         add_message("Ruby", reply)
+
+        # 4. Save her memory to JSON immediately after responding!
+        # This ensures she remembers what she was curious about if you close the app.
+        curiosity.save_memory()
 
     # ----------------------------------------
     # Layout
