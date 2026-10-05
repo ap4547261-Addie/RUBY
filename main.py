@@ -1,4 +1,4 @@
-# main.py - Ruby V1.9 (System 1/2 + Router + StoryCache + Goals + Lemur bridge + Synced Curiosity)
+# main.py - Ruby V1.9 (System 1/2 + Router + StoryCache + Goals + Lemur bridge + Synced Curiosity + Brain Monitor)
 
 import os
 import shutil
@@ -12,8 +12,8 @@ from brain.system2 import System2
 from prompts.ruby_prompt import build_ruby_prompt
 from settings.settings_manager import SettingsManager
 from tools.ws_server import WSServer
-from cognition.curiosity import Curiosity# Ensure this path matches where you saved curiosity.py
-
+from cognition.curiosity import Curiosity
+from brain.brain_monitor import BrainMonitor # Blueprint UI
 
 def main(page: ft.Page):
     page.title = "Ruby"
@@ -42,6 +42,9 @@ def main(page: ft.Page):
 
     system1 = System1(user_name=user_name)
     system2 = System2(response_engine, ruby_prompt="")
+
+    # Initialize the Brain Monitor
+    brain_monitor = BrainMonitor()
 
     # ----------------------------------------
     # UI
@@ -195,7 +198,7 @@ def main(page: ft.Page):
     ws_server.on_message = _on_message
 
     # ----------------------------------------
-    # Settings Dialog (Kept fully intact)
+    # Settings Dialog (Fully Intact)
     # ----------------------------------------
     def open_settings(e):
         name_field = ft.TextField(
@@ -897,6 +900,15 @@ def main(page: ft.Page):
         except Exception as e:
             print(f"⚠️ Failed to save curiosity memory: {e}")
 
+        # --- BLUEPRINT: UPDATE BRAIN MONITOR UI ---
+        try:
+            brain_state = response_engine.get_brain_state()
+            for region, value in brain_state.items():
+                brain_monitor.update_ui(region, value)
+            page.update()
+        except Exception as ex:
+            print(f"⚠️ Failed to update brain monitor: {ex}")
+
     # ----------------------------------------
     # Layout
     # ----------------------------------------
@@ -914,19 +926,44 @@ def main(page: ft.Page):
         icon_color=ft.Colors.PINK_400,
     )
 
+    # --- LAYOUT WITH BRAIN MONITOR SIDEBAR ---
+    main_chat_ui = ft.Column(
+        controls=[
+            ft.Row(
+                controls=[
+                    ft.Text("Ruby", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.PINK_400),
+                    settings_button,
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            ),
+            status,
+            ws_status,
+            ft.Divider(),
+            chat,
+            ft.Row(controls=[message_box, send_button]),
+        ],
+        expand=True,
+    )
+
+    sidebar_ui = ft.Container(
+        content=brain_monitor.get_ui(),
+        width=280,
+        padding=10,
+        bgcolor="#18181C",
+        border_radius=10,
+        border=ft.border.all(1, "#3A3A46"),
+        margin=ft.margin.only(left=10)
+    )
+
     page.add(
         ft.Row(
             controls=[
-                ft.Text("Ruby", size=30, weight=ft.FontWeight.BOLD, color=ft.Colors.PINK_400),
-                settings_button,
+                main_chat_ui,
+                sidebar_ui
             ],
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-        ),
-        status,
-        ws_status,
-        ft.Divider(),
-        chat,
-        ft.Row(controls=[message_box, send_button]),
+            expand=True,
+            vertical_alignment=ft.CrossAxisAlignment.START
+        )
     )
 
     load_chat_history()
