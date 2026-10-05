@@ -1,6 +1,12 @@
-# main.py - Ruby V1.9 (System 1/2 + Router + StoryCache + Goals + Lemur bridge + Synced Curiosity + Brain Monitor)
-
+# main.py - Ruby V1.9
 import os
+import sys
+import io
+
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 import shutil
 import asyncio
 import flet as ft
