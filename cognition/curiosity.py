@@ -1,4 +1,6 @@
 import re
+import json
+import os
 from datetime import datetime, timezone
 
 
@@ -33,13 +35,15 @@ class Curiosity:
     INTEREST_THRESHOLD = 0.50
     ASK_THRESHOLD = 0.60
 
-    def __init__(self):
-        # In-memory only. No DB persistence for now.
+    def __init__(self, memory_file="ruby_memory.json"):
+        # 🔥 FIX: Accept memory_file and load saved memory
+        self.memory_file = memory_file
         # No capacity limits applied to these lists.
         self._interests = []
         self._unknowns = []
         self._uncertainties = []
         self._history = []
+        self.load_memory()
 
     # ========================================================
     # NOTICE
@@ -84,7 +88,6 @@ class Curiosity:
     # ========================================================
 
     def _notice_person_information(self, text, lower):
-        # 🔥 FIX 3: Using Regex for more flexible matching
         if re.search(r"\b(my name is|call me|i'm [a-z]+)\b", lower):
             self._resolve_unknown(category="person", subject="identity")
 
@@ -139,7 +142,6 @@ class Curiosity:
     # ========================================================
 
     def _notice_places(self, text, lower):
-        # 🔥 FIX 3: Broader regex matching for movement
         if re.search(r"\b(i went to|i'm going to|i am going to|i visited|i've been to|i was at|i came from|i traveled to|i travelled to)\b", lower):
             self._add_interest(
                 category="event",
@@ -195,7 +197,6 @@ class Curiosity:
     # ========================================================
 
     def _notice_plans(self, text, lower):
-        # 🔥 FIX 3: Regex to catch different future phrasings
         if re.search(r"\b(i want to|i'm planning to|i am planning to|i'm going to|i am going to|i hope to|i'd like to|i would like to|someday|in the future)\b", lower):
             self._add_interest(
                 category="future",
@@ -215,7 +216,6 @@ class Curiosity:
     # ========================================================
 
     def _notice_emotion(self, text, lower):
-        # 🔥 FIX 3: Regex matching for emotional states
         if re.search(r"\b(i'm happy|i am happy|i'm sad|i am sad|i'm angry|i am angry|i'm scared|i am scared|i'm worried|i am worried|i feel|i felt)\b", lower):
             self._add_interest(
                 category="emotion",
@@ -253,7 +253,6 @@ class Curiosity:
     # ========================================================
 
     def _notice_beliefs(self, text, lower):
-        # 🔥 FIX 3: Regex for beliefs
         if re.search(r"\b(i believe|i think|in my opinion|i feel like people|i don't believe|i dont believe)\b", lower):
             self._add_interest(
                 category="belief",
@@ -405,7 +404,6 @@ class Curiosity:
             "subject": strongest["subject"],
             "reason": strongest["reason"],
             "strength": strongest["strength"],
-            # 🔥 FIX 4: Force the LLM to take the lead and prevent the deflection loop
             "instruction": (
                 f"Ruby's curiosity engine has detected a strong topic: '{strongest['subject']}'. "
                 "You MUST ask a specific, natural follow-up question about this right now. "
@@ -535,6 +533,40 @@ class Curiosity:
         self._unknowns.clear()
         self._uncertainties.clear()
         self._history.clear()
+        self.save_memory()
+
+    # ========================================================
+    # PERSISTENCE (SAVE / LOAD)
+    # ========================================================
+
+    def save_memory(self):
+        """Saves current curiosity state to a JSON file."""
+        data = {
+            "interests": self._interests,
+            "unknowns": self._unknowns,
+            "uncertainties": self._uncertainties,
+            "history": self._history
+        }
+        try:
+            with open(self.memory_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4, ensure_ascii=False)
+            # print(f"[Memory] Ruby's curiosity saved to {self.memory_file}")
+        except Exception as e:
+            print(f"⚠️ Could not save curiosity memory: {e}")
+
+    def load_memory(self):
+        """Loads curiosity state from a JSON file if it exists."""
+        if os.path.exists(self.memory_file):
+            try:
+                with open(self.memory_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    self._interests = data.get("interests", [])
+                    self._unknowns = data.get("unknowns", [])
+                    self._uncertainties = data.get("uncertainties", [])
+                    self._history = data.get("history", [])
+                print(f"[Memory] Ruby's curiosity loaded from {self.memory_file}")
+            except Exception as e:
+                print(f"⚠️ Could not load curiosity memory: {e}")
 
     # ========================================================
     # HELPERS
