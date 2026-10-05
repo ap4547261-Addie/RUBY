@@ -1,3 +1,4 @@
+# evolution/value_evolution.py
 from datetime import datetime
 from memory import database
 
@@ -22,7 +23,7 @@ class ValueEvolution:
     """
     Ruby's core values. Deeper than beliefs, slower than personality.
     Values shift only when evidence accumulates over months.
-    No caps. Values can climb above 1.0 or drop below 0.0.
+    🚀 NO LIMITS: Values can climb above 1.0 or drop below 0.0.
     """
 
     VALUE_NAMES = tuple(BASELINE_VALUES.keys())
@@ -36,8 +37,10 @@ class ValueEvolution:
     def _ensure_table(self):
         conn = database.get_connection()
         c = conn.cursor()
+        # 🔥 FIX: Renamed 'values' to 'core_values' (SQL reserved keyword)
+        # 🚀 NO LIMITS: No CHECK constraints on value ranges
         c.execute("""
-            CREATE TABLE IF NOT EXISTS values (
+            CREATE TABLE IF NOT EXISTS core_values (
                 id INTEGER PRIMARY KEY,
                 user_name TEXT UNIQUE NOT NULL,
                 freedom REAL DEFAULT 0.0,
@@ -74,11 +77,11 @@ class ValueEvolution:
     def _ensure_row(self):
         conn = database.get_connection()
         c = conn.cursor()
-        c.execute("SELECT id FROM values WHERE user_name = ?", (self.user_name,))
+        c.execute("SELECT id FROM core_values WHERE user_name = ?", (self.user_name,))
         if c.fetchone() is None:
             now = datetime.now().isoformat(timespec="seconds")
             c.execute("""
-                INSERT INTO values
+                INSERT INTO core_values
                     (user_name, freedom, authenticity, connection, safety,
                      honesty, loyalty, growth, control, warmth, last_updated)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -107,7 +110,7 @@ class ValueEvolution:
         c.execute("""
             SELECT freedom, authenticity, connection, safety, honesty,
                    loyalty, growth, control, warmth
-            FROM values WHERE user_name = ?
+            FROM core_values WHERE user_name = ?
         """, (self.user_name,))
         row = c.fetchone()
         conn.close()
@@ -127,8 +130,9 @@ class ValueEvolution:
         now = datetime.now().isoformat(timespec="seconds")
         conn = database.get_connection()
         c = conn.cursor()
+        # 🚀 NO LIMITS: Pure addition/subtraction. No MAX/MIN clamping.
         c.execute(f"""
-            UPDATE values SET {value} = {value} + ?, last_updated = ?
+            UPDATE core_values SET {value} = {value} + ?, last_updated = ?
             WHERE user_name = ?
         """, (amount, now, self.user_name))
         c.execute("""
@@ -165,7 +169,7 @@ class ValueEvolution:
         v = self.get_all()
         parts = []
 
-        # only describe the notable ones — those far from midpoint
+        # Only describe the notable ones — those far from midpoint
         if v["freedom"] > 0.7:
             parts.append("values her freedom deeply")
         elif v["freedom"] < 0.3:
@@ -213,7 +217,7 @@ class ValueEvolution:
     def wipe(self):
         conn = database.get_connection()
         c = conn.cursor()
-        c.execute("DELETE FROM values WHERE user_name = ?", (self.user_name,))
+        c.execute("DELETE FROM core_values WHERE user_name = ?", (self.user_name,))
         c.execute("DELETE FROM value_history WHERE user_name = ?", (self.user_name,))
         conn.commit()
         conn.close()
