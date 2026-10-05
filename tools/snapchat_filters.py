@@ -15,6 +15,9 @@ def apply_filter(pil_img, filter_name):
     draw = ImageDraw.Draw(img, "RGBA")
     faces = detect_faces(img)
 
+    # ========================================================
+    # FACE-ATTACHED FILTERS (dog, cat, bunny, glasses, etc.)
+    # ========================================================
     for (x, y, w, h) in faces:
         if filter_name == "dog":
             ew, eh = w // 3, h // 3
@@ -62,6 +65,9 @@ def apply_filter(pil_img, filter_name):
                 draw.ellipse([hx + w//8, hy, hx + 3*w//8, hy + h//5], fill=(255, 80, 130, 200))
                 draw.polygon([(hx, hy + h//8), (hx + w//4, hy + h//8), (hx + w//8, hy + h//4)], fill=(255, 80, 130, 200))
 
+    # ========================================================
+    # FULL-FRAME FILTERS
+    # ========================================================
     if filter_name == "beauty":
         img = img.filter(ImageFilter.GaussianBlur(1.2))
         img = ImageEnhance.Brightness(img).enhance(1.08)
@@ -92,8 +98,79 @@ def apply_filter(pil_img, filter_name):
     elif filter_name == "thermal":
         img = ImageOps.colorize(ImageOps.grayscale(img), "#000080", "#ff0000")
 
+    # ========================================================
+    # NEW FILTERS (Option B additions)
+    # ========================================================
+    elif filter_name == "Nostalgia":
+        # Faded old-photo look with soft warm tint and slight grain
+        img = ImageOps.colorize(ImageOps.grayscale(img), "#3d2a1a", "#e8d5b0")
+        img = ImageEnhance.Color(img).enhance(0.6)
+        img = ImageEnhance.Brightness(img).enhance(0.95)
+        # Add subtle grain
+        np_img = np.array(img).astype(np.int16)
+        noise = np.random.randint(-12, 12, np_img.shape, dtype=np.int16)
+        np_img = np.clip(np_img + noise, 0, 255).astype(np.uint8)
+        img = Image.fromarray(np_img)
+        img = img.filter(ImageFilter.GaussianBlur(0.6))
+
+    elif filter_name == "CINEMATIC BARS":
+        # Widescreen letterbox with a subtle teal-orange grade
+        img = ImageEnhance.Contrast(img).enhance(1.2)
+        img = ImageEnhance.Color(img).enhance(1.15)
+        # Teal shadows + orange highlights (Hollywood grade)
+        np_img = np.array(img).astype(np.float32)
+        np_img[:, :, 0] = np.clip(np_img[:, :, 0] * 1.08, 0, 255)   # R up
+        np_img[:, :, 2] = np.clip(np_img[:, :, 2] * 1.05, 0, 255)   # B up
+        np_img[:, :, 1] = np.clip(np_img[:, :, 1] * 0.96, 0, 255)   # G down
+        img = Image.fromarray(np_img.astype(np.uint8))
+        # Add black bars top and bottom (cinema letterbox)
+        W, H = img.size
+        bar_height = int(H * 0.12)
+        overlay = Image.new("RGB", (W, H), (0, 0, 0))
+        img.paste(overlay, (0, 0))
+        img.paste(overlay, (0, H - bar_height))
+
+    elif filter_name == "Shadow":
+        # High contrast dark moody look — deep shadows, cool tones
+        img = ImageEnhance.Contrast(img).enhance(1.6)
+        img = ImageEnhance.Brightness(img).enhance(0.75)
+        overlay = Image.new("RGB", img.size, (10, 5, 30))
+        img = Image.blend(img, overlay, 0.25)
+        img = ImageEnhance.Color(img).enhance(0.7)
+
+    elif filter_name == "Disposable Hard":
+        # Harsh flash-photo look — blown highlights, crushed blacks, greenish tint
+        img = ImageEnhance.Contrast(img).enhance(1.8)
+        img = ImageEnhance.Brightness(img).enhance(1.15)
+        # Green-cyan tint typical of cheap disposable camera flashes
+        np_img = np.array(img).astype(np.float32)
+        np_img[:, :, 0] = np.clip(np_img[:, :, 0] * 0.92, 0, 255)  # R down
+        np_img[:, :, 1] = np.clip(np_img[:, :, 1] * 1.05, 0, 255)  # G up
+        np_img[:, :, 2] = np.clip(np_img[:, :, 2] * 1.02, 0, 255)  # B up
+        img = Image.fromarray(np_img.astype(np.uint8))
+        # Vignette (dark edges like a cheap lens)
+        W, H = img.size
+        vignette = Image.new("L", (W, H), 0)
+        vdraw = ImageDraw.Draw(vignette)
+        vdraw.ellipse([-W*0.2, -H*0.2, W*1.2, H*1.2], fill=255)
+        vignette = vignette.filter(ImageFilter.GaussianBlur(W//8))
+        black = Image.new("RGB", (W, H), (0, 0, 0))
+        img = Image.composite(img, black, vignette)
+        # Slight grain
+        np_img = np.array(img).astype(np.int16)
+        noise = np.random.randint(-18, 18, np_img.shape, dtype=np.int16)
+        np_img = np.clip(np_img + noise, 0, 255).astype(np.uint8)
+        img = Image.fromarray(np_img)
+
     return img
 
-FILTERS = ["none", "dog", "cat", "bunny", "glasses", "mustache", "crown", "hearts",
-           "beauty", "vintage", "neon", "glitch", "grayscale", "cool", "warm",
-           "cyberpunk", "thermal"]
+FILTERS = [
+    "none",
+    # Face-attached
+    "dog", "cat", "bunny", "glasses", "mustache", "crown", "hearts",
+    # Color / mood
+    "beauty", "vintage", "neon", "glitch", "grayscale", "cool", "warm",
+    "cyberpunk", "thermal",
+    # Cinematic / stylized (new)
+    "Nostalgia", "CINEMATIC BARS", "Shadow", "Disposable Hard",
+]
