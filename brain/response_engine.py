@@ -1,4 +1,4 @@
-# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache + Goals + Synced Curiosity)
+# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache + Goals + Synced Curiosity + Connectome + Global Workspace)
 
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
@@ -14,6 +14,17 @@ from cognition.cognition_engine import CognitionEngine
 from cognition.curiosity import Curiosity
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
+
+# --- BLUEPRINT IMPORTS ---
+try:
+    from brain.connectome import Connectome
+    from brain.global_workspace import GlobalWorkspace
+    BLUEPRINT_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ Blueprint modules not available: {e}")
+    BLUEPRINT_AVAILABLE = False
+    Connectome = None
+    GlobalWorkspace = None
 
 try:
     from brain.memory_router import get_memory_router
@@ -80,6 +91,14 @@ class ResponseEngine:
         
         self.learning = LearningEngine(user_name=user_name)
         self.personality = PersonalityDevelopment(user_name=user_name)
+
+        # --- BLUEPRINT INIT ---
+        if BLUEPRINT_AVAILABLE:
+            self.connectome = Connectome()
+            self.workspace = GlobalWorkspace()
+        else:
+            self.connectome = None
+            self.workspace = None
 
         if EVOLUTION_AVAILABLE:
             try:
@@ -158,10 +177,17 @@ class ResponseEngine:
         return reply
 
     # ============================================================
-    # FULL PATH
+    # FULL PATH (Blueprint Integrated)
     # ============================================================
     def respond(self, user_message: str, ruby_prompt: str) -> str:
-        # 1. Feed the message to the synced Curiosity Engine
+        
+        # --------------------------------------------------------
+        # 0. BLUEPRINT: PERCEPTION & ATTENTION
+        # --------------------------------------------------------
+        if self.connectome and self.workspace:
+            self.workspace.clear()
+            self.connectome.update_node("thalamus", 0.9) # Attention spikes
+
         try:
             self.curiosity.notice(user_message)
         except Exception as e:
@@ -190,13 +216,16 @@ class ResponseEngine:
             }
 
         # --------------------------------------------------------
-        # 1. CONTEXT
+        # 1. CONTEXT BUILDING (Broadcasting to Global Workspace)
         # --------------------------------------------------------
         context = ""
 
         if "episodic" in read_layers or "relationship" in read_layers:
             try:
-                context = self.memory.build_context(user_message)
+                mem_ctx = self.memory.build_context(user_message)
+                if mem_ctx:
+                    context = f"{context}\n\n{mem_ctx}"
+                    if self.workspace: self.workspace.broadcast("memory", mem_ctx)
             except Exception as e:
                 print(f"⚠️ memory.build_context failed: {e}")
 
@@ -207,12 +236,14 @@ class ResponseEngine:
                 if childhood_line:
                     context = f"{context}\n\n{childhood_line}"
                     childhood_used = True
+                    if self.workspace: self.workspace.broadcast("childhood", childhood_line)
             except Exception as e:
                 print(f"⚠️ childhood.build_context failed: {e}")
 
         try:
             inner_line = self.dev.describe()
             context = f"{context}\n\nYour body and mood: {inner_line}"
+            if self.workspace: self.workspace.broadcast("internal_state", inner_line)
         except Exception as e:
             print(f"⚠️ dev.describe failed: {e}")
 
@@ -221,6 +252,8 @@ class ResponseEngine:
                 emotions = self.emotion.get_all()
                 emotion_line = self.emotion_expr.describe(emotions)
                 context = f"{context}\n\nYour feelings right now: {emotion_line}"
+                if self.workspace: self.workspace.broadcast("emotion", emotion_line)
+                if self.connectome: self.connectome.update_node("amygdala", 0.7) # Emotion spikes
             except Exception as e:
                 print(f"⚠️ emotion.describe failed: {e}")
 
@@ -228,6 +261,7 @@ class ResponseEngine:
             try:
                 identity_line = self.identity.describe()
                 context = f"{context}\n\n{identity_line}"
+                if self.workspace: self.workspace.broadcast("identity", identity_line)
             except Exception as e:
                 print(f"⚠️ identity.describe failed: {e}")
 
@@ -235,6 +269,7 @@ class ResponseEngine:
             try:
                 social_line = self.social.describe()
                 context = f"{context}\n\nWho he is to you:\n{social_line}"
+                if self.workspace: self.workspace.broadcast("social", social_line)
             except Exception as e:
                 print(f"⚠️ social.describe failed: {e}")
 
@@ -242,6 +277,7 @@ class ResponseEngine:
             try:
                 drive_line = self.motivation.describe()
                 context = f"{context}\n\nWhat you need right now: {drive_line}"
+                if self.workspace: self.workspace.broadcast("motivation", drive_line)
             except Exception as e:
                 print(f"⚠️ motivation.describe failed: {e}")
 
@@ -249,6 +285,7 @@ class ResponseEngine:
             try:
                 personality_line = self.personality.describe()
                 context = f"{context}\n\n{personality_line}"
+                if self.workspace: self.workspace.broadcast("personality", personality_line)
             except Exception as e:
                 print(f"⚠️ personality.describe failed: {e}")
 
@@ -257,6 +294,7 @@ class ResponseEngine:
                 goals_line = self.dev.goals.describe()
                 if goals_line:
                     context = f"{context}\n\n{goals_line}"
+                    if self.workspace: self.workspace.broadcast("goals", goals_line)
             except Exception as e:
                 print(f"⚠️ goals.describe failed: {e}")
 
@@ -267,6 +305,7 @@ class ResponseEngine:
                 values_line = self.evolution.describe()
                 if values_line:
                     context = f"{context}\n\n{values_line}"
+                    if self.workspace: self.workspace.broadcast("evolution", values_line)
             except Exception as e:
                 print(f"⚠️ evolution.describe failed: {e}")
 
@@ -275,6 +314,7 @@ class ResponseEngine:
                 semantic_line = self.integrations.build_context(user_message)
                 if semantic_line:
                     context = f"{context}\n\n{semantic_line}"
+                    if self.workspace: self.workspace.broadcast("integrations", semantic_line)
             except Exception as e:
                 print(f"⚠️ integrations.build_context failed: {e}")
 
@@ -287,7 +327,9 @@ class ResponseEngine:
                         title = (h.get("title") or "")[:80]
                         summary = (h.get("summary") or "")[:200]
                         lines.append(f"- {title}: {summary}")
-                    context = f"{context}\n\n" + "\n".join(lines)
+                    web_line = "\n".join(lines)
+                    context = f"{context}\n\n{web_line}"
+                    if self.workspace: self.workspace.broadcast("web", web_line)
             except Exception as e:
                 print(f"⚠️ web search failed: {e}")
 
@@ -296,6 +338,7 @@ class ResponseEngine:
                 learning_line = self.learning.describe()
                 if learning_line:
                     context = f"{context}\n\nWhat you've learned from experience: {learning_line}"
+                    if self.workspace: self.workspace.broadcast("learning", learning_line)
             except Exception as e:
                 print(f"⚠️ learning.describe failed: {e}")
 
@@ -312,6 +355,7 @@ class ResponseEngine:
                     )
                     self.curiosity.mark_explored(ctx['subject'], ctx['category'])
                     print(f"🔍 Curiosity Triggered inside Engine: {ctx['subject']}")
+                    if self.workspace: self.workspace.broadcast("curiosity", curiosity_instruction)
         except Exception as e:
             print(f"⚠️ curiosity context generation failed: {e}")
 
@@ -328,7 +372,7 @@ class ResponseEngine:
             print(f"⚠️ curiosity context failed: {e}")
 
         # --------------------------------------------------------
-        # 2. COGNITION
+        # 2. COGNITION (Appraisal & Prediction)
         # --------------------------------------------------------
         trace = None
         try:
@@ -346,11 +390,22 @@ class ResponseEngine:
             if "cognition_trace" in read_layers:
                 cognition_line = self.cognition.describe(trace)
                 context = f"{context}\n\nYour thinking:\n{cognition_line}"
+                if self.workspace: self.workspace.broadcast("cognition_trace", cognition_line)
         except Exception as e:
             print(f"⚠️ cognition.process failed: {e}")
 
         # --------------------------------------------------------
-        # FORMAT PROMPT (Inject context and curiosity)
+        # 3. GLOBAL WORKSPACE COMPILATION
+        # --------------------------------------------------------
+        # If Blueprint is active, compile the workspace context
+        if self.workspace:
+            workspace_context = self.workspace.build_prompt_context()
+            if workspace_context:
+                context = f"{context}\n\n--- GLOBAL WORKSPACE ---\n{workspace_context}"
+            self.connectome.update_node("global_workspace", 0.95) # Workspace spikes
+
+        # --------------------------------------------------------
+        # 4. FORMAT PROMPT
         # --------------------------------------------------------
         if "{context}" in ruby_prompt:
             try:
@@ -365,9 +420,10 @@ class ResponseEngine:
             description += f"\n\nCURIOSITY ENGINE INSTRUCTION:\n{curiosity_instruction}"
 
         # --------------------------------------------------------
-        # GENERATE
+        # 5. DECISION & ACTION (Generation)
         # --------------------------------------------------------
         self.short_term.add("user", user_message)
+        if self.connectome: self.connectome.update_node("decision", 1.0) # Decision spikes
 
         try:
             reply = self.brain.generate(
@@ -383,7 +439,7 @@ class ResponseEngine:
         self.memory.process(user_message, reply)
 
         # --------------------------------------------------------
-        # STATE UPDATES
+        # 6. POST-GENERATION STATE UPDATES
         # --------------------------------------------------------
         try:
             self.dev.tick()
@@ -526,8 +582,21 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ goals.observe failed: {e}")
 
-        # 6. Return the final reply!
+        # 7. BLUEPRINT: PROPAGATE CONNECTOME STATE
+        if self.connectome:
+            self.connectome.propagate()
+
+        # 8. Return the final reply!
         return reply
+
+    # ============================================================
+    # BLUEPRINT: UI DATA ACCESS
+    # ============================================================
+    def get_brain_state(self):
+        """Returns the current activation level of all brain regions for the UI."""
+        if not self.connectome:
+            return {}
+        return self.connectome.nodes
 
     def clear_short_term(self):
         self.short_term.clear()
@@ -535,6 +604,9 @@ class ResponseEngine:
     def wipe_all_memory(self):
         self.short_term.clear()
         self.memory.wipe_all()
+        if self.connectome: self.connectome = Connectome()
+        if self.workspace: self.workspace.clear()
+        
         for name, obj in [
             ("childhood", self.childhood),
             ("dev", self.dev),
