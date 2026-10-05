@@ -1,5 +1,4 @@
-# brain/response_engine.py — Ruby V1.9 (MemoryRouter + StoryCache + Goals + Synced Curiosity + Connectome + Global Workspace)
-
+# brain/response_engine.py
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
 from memory.childhood_memory import ChildhoodMemory
@@ -15,7 +14,6 @@ from cognition.curiosity import Curiosity
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
 
-# --- BLUEPRINT IMPORTS ---
 try:
     from brain.connectome import Connectome
     from brain.global_workspace import GlobalWorkspace
@@ -85,14 +83,10 @@ class ResponseEngine:
         self.reflection = ReflectionEngine(user_name=user_name)
         self.motivation = MotivationEngine(user_name=user_name, platform=platform)
         self.cognition = CognitionEngine(user_name=user_name)
-        
-        # Use the shared curiosity instance passed from main.py
         self.curiosity = curiosity if curiosity is not None else Curiosity()
-        
         self.learning = LearningEngine(user_name=user_name)
         self.personality = PersonalityDevelopment(user_name=user_name)
 
-        # --- BLUEPRINT INIT ---
         if BLUEPRINT_AVAILABLE:
             self.connectome = Connectome()
             self.workspace = GlobalWorkspace()
@@ -151,9 +145,6 @@ class ResponseEngine:
         else:
             self.story_cache = None
 
-    # ============================================================
-    # FAST PATH
-    # ============================================================
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
         if "{context}" in ruby_prompt:
             try:
@@ -176,17 +167,10 @@ class ResponseEngine:
         self.short_term.add("assistant", reply)
         return reply
 
-    # ============================================================
-    # FULL PATH (Blueprint Integrated)
-    # ============================================================
     def respond(self, user_message: str, ruby_prompt: str) -> str:
-        
-        # --------------------------------------------------------
-        # 0. BLUEPRINT: PERCEPTION & ATTENTION
-        # --------------------------------------------------------
         if self.connectome and self.workspace:
             self.workspace.clear()
-            self.connectome.update_node("thalamus", 0.9) # Attention spikes
+            self.connectome.update_node("thalamus", 0.9)
 
         try:
             self.curiosity.notice(user_message)
@@ -207,7 +191,6 @@ class ResponseEngine:
                 print(f"⚠️ router.plan failed: {e}")
 
         read_layers = set(plan.get("read_layers", []) or [])
-
         if not self.router:
             read_layers = {
                 "episodic", "childhood", "emotion", "identity",
@@ -215,9 +198,6 @@ class ResponseEngine:
                 "web", "learning", "relationship",
             }
 
-        # --------------------------------------------------------
-        # 1. CONTEXT BUILDING (Broadcasting to Global Workspace)
-        # --------------------------------------------------------
         context = ""
 
         if "episodic" in read_layers or "relationship" in read_layers:
@@ -229,13 +209,11 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ memory.build_context failed: {e}")
 
-        childhood_used = False
         if "childhood" in read_layers:
             try:
                 childhood_line = self.childhood.build_context(user_message, limit=None)
                 if childhood_line:
                     context = f"{context}\n\n{childhood_line}"
-                    childhood_used = True
                     if self.workspace: self.workspace.broadcast("childhood", childhood_line)
             except Exception as e:
                 print(f"⚠️ childhood.build_context failed: {e}")
@@ -253,7 +231,7 @@ class ResponseEngine:
                 emotion_line = self.emotion_expr.describe(emotions)
                 context = f"{context}\n\nYour feelings right now: {emotion_line}"
                 if self.workspace: self.workspace.broadcast("emotion", emotion_line)
-                if self.connectome: self.connectome.update_node("amygdala", 0.7) # Emotion spikes
+                if self.connectome: self.connectome.update_node("amygdala", 0.7)
             except Exception as e:
                 print(f"⚠️ emotion.describe failed: {e}")
 
@@ -298,9 +276,7 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ goals.describe failed: {e}")
 
-        if self.evolution and (
-            "identity" in read_layers or "personality" in read_layers
-        ):
+        if self.evolution and ("identity" in read_layers or "personality" in read_layers):
             try:
                 values_line = self.evolution.describe()
                 if values_line:
@@ -342,7 +318,6 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ learning.describe failed: {e}")
 
-        # --- CURIOSITY CONTEXT GENERATION ---
         curiosity_instruction = ""
         try:
             if self.curiosity.should_ask():
@@ -371,9 +346,6 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ curiosity context failed: {e}")
 
-        # --------------------------------------------------------
-        # 2. COGNITION (Appraisal & Prediction)
-        # --------------------------------------------------------
         trace = None
         try:
             rel = self.memory.relationship.get_state()
@@ -394,19 +366,18 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ cognition.process failed: {e}")
 
-        # --------------------------------------------------------
-        # 3. GLOBAL WORKSPACE COMPILATION
-        # --------------------------------------------------------
-        # If Blueprint is active, compile the workspace context
         if self.workspace:
             workspace_context = self.workspace.build_prompt_context()
             if workspace_context:
                 context = f"{context}\n\n--- GLOBAL WORKSPACE ---\n{workspace_context}"
-            self.connectome.update_node("global_workspace", 0.95) # Workspace spikes
+            self.connectome.update_node("global_workspace", 0.95)
 
-        # --------------------------------------------------------
-        # 4. FORMAT PROMPT
-        # --------------------------------------------------------
+        # 🔥 SAFETY: Cap context so the model doesn't overflow
+        MAX_CONTEXT_CHARS = 6000
+        if len(context) > MAX_CONTEXT_CHARS:
+            print(f"⚠️ Context too big ({len(context)} chars), trimming to {MAX_CONTEXT_CHARS}")
+            context = context[:MAX_CONTEXT_CHARS] + "\n[...truncated...]"
+
         if "{context}" in ruby_prompt:
             try:
                 description = ruby_prompt.format(user_name=self.user_name, context=context or "")
@@ -415,15 +386,15 @@ class ResponseEngine:
         else:
             description = f"{ruby_prompt}\n\nWhat you know right now:\n{context}"
 
-        # Force-inject the curiosity instruction
         if curiosity_instruction and "CURIOSITY ENGINE INSTRUCTION" not in description:
             description += f"\n\nCURIOSITY ENGINE INSTRUCTION:\n{curiosity_instruction}"
 
-        # --------------------------------------------------------
-        # 5. DECISION & ACTION (Generation)
-        # --------------------------------------------------------
         self.short_term.add("user", user_message)
-        if self.connectome: self.connectome.update_node("decision", 1.0) # Decision spikes
+        if self.connectome: self.connectome.update_node("decision", 1.0)
+
+        print(f"🔍 PROMPT LEN: {len(description)} chars (~{len(description)//4} tokens)")
+        print(f"🔍 HAS CAMERA TOOL: {'CAMERA TOOL' in description}")
+        print(f"🔍 HAS SEND_SELFIE: {'SEND_SELFIE' in description}")
 
         try:
             reply = self.brain.generate(
@@ -438,33 +409,21 @@ class ResponseEngine:
         self.short_term.add("assistant", reply)
         self.memory.process(user_message, reply)
 
-        # --------------------------------------------------------
-        # 6. POST-GENERATION STATE UPDATES
-        # --------------------------------------------------------
         try:
             self.dev.tick()
             rel = self.memory.relationship.get_state()
-            self.dev.on_message(
-                user_message, reply,
-                trust=rel["trust"],
-                attachment=rel["attachment"],
-            )
+            self.dev.on_message(user_message, reply, trust=rel["trust"], attachment=rel["attachment"])
         except Exception as e:
             print(f"⚠️ dev.on_message failed: {e}")
 
         try:
             rel = self.memory.relationship.get_state()
             inner = self.dev.state.get()
-            self.emotion.process(
-                user_message,
-                context={
-                    "trust": rel["trust"],
-                    "attachment": rel["attachment"],
-                    "warmth": inner["warmth"],
-                    "irritation": inner["irritation"],
-                    "message_count": rel["message_count"],
-                },
-            )
+            self.emotion.process(user_message, context={
+                "trust": rel["trust"], "attachment": rel["attachment"],
+                "warmth": inner["warmth"], "irritation": inner["irritation"],
+                "message_count": rel["message_count"],
+            })
         except Exception as e:
             print(f"⚠️ emotion.process failed: {e}")
 
@@ -472,16 +431,10 @@ class ResponseEngine:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
             inner = self.dev.state.get()
-            self.identity.process(
-                user_message, reply,
-                context={
-                    "trust": rel["trust"],
-                    "attachment": rel["attachment"],
-                    "emotions": emo,
-                    "irritation": inner["irritation"],
-                    "warmth": inner["warmth"],
-                },
-            )
+            self.identity.process(user_message, reply, context={
+                "trust": rel["trust"], "attachment": rel["attachment"], "emotions": emo,
+                "irritation": inner["irritation"], "warmth": inner["warmth"],
+            })
         except Exception as e:
             print(f"⚠️ identity.process failed: {e}")
 
@@ -489,15 +442,10 @@ class ResponseEngine:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
             inner = self.dev.state.get()
-            self.social.process(
-                user_message, reply,
-                context={
-                    "trust": rel["trust"],
-                    "attachment": rel["attachment"],
-                    "emotions": emo,
-                    "internal_state": inner,
-                },
-            )
+            self.social.process(user_message, reply, context={
+                "trust": rel["trust"], "attachment": rel["attachment"],
+                "emotions": emo, "internal_state": inner,
+            })
         except Exception as e:
             print(f"⚠️ social.process failed: {e}")
 
@@ -505,11 +453,9 @@ class ResponseEngine:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
             inner = self.dev.state.get()
-            beliefs = self.identity.beliefs()
             self.reflection.process(
-                internal_state=inner,
-                emotions=emo,
-                beliefs=beliefs,
+                internal_state=inner, emotions=emo,
+                beliefs=self.identity.beliefs(),
                 message_count=rel["message_count"],
             )
         except Exception as e:
@@ -519,15 +465,10 @@ class ResponseEngine:
             rel = self.memory.relationship.get_state()
             emo = self.emotion.get_all()
             inner = self.dev.state.get()
-            self.motivation.process(
-                user_message,
-                context={
-                    "trust": rel["trust"],
-                    "attachment": rel["attachment"],
-                    "emotions": emo,
-                    "internal_state": inner,
-                },
-            )
+            self.motivation.process(user_message, context={
+                "trust": rel["trust"], "attachment": rel["attachment"],
+                "emotions": emo, "internal_state": inner,
+            })
         except Exception as e:
             print(f"⚠️ motivation.process failed: {e}")
 
@@ -536,10 +477,8 @@ class ResponseEngine:
             emo = self.emotion.get_all()
             inner = self.dev.state.get()
             self.personality.process(
-                internal_state=inner,
-                emotions=emo,
-                relationship=rel,
-                learning=None,
+                internal_state=inner, emotions=emo,
+                relationship=rel, learning=None,
             )
         except Exception as e:
             print(f"⚠️ personality.process failed: {e}")
@@ -550,10 +489,8 @@ class ResponseEngine:
                 emo = self.emotion.get_all()
                 inner = self.dev.state.get()
                 self.evolution.process(
-                    internal_state=inner,
-                    emotions=emo,
-                    relationship=rel,
-                    learning=None,
+                    internal_state=inner, emotions=emo,
+                    relationship=rel, learning=None,
                 )
             except Exception as e:
                 print(f"⚠️ evolution.process failed: {e}")
@@ -582,18 +519,12 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ goals.observe failed: {e}")
 
-        # 7. BLUEPRINT: PROPAGATE CONNECTOME STATE
         if self.connectome:
             self.connectome.propagate()
 
-        # 8. Return the final reply!
         return reply
 
-    # ============================================================
-    # BLUEPRINT: UI DATA ACCESS
-    # ============================================================
     def get_brain_state(self):
-        """Returns the current activation level of all brain regions for the UI."""
         if not self.connectome:
             return {}
         return self.connectome.nodes
@@ -606,18 +537,12 @@ class ResponseEngine:
         self.memory.wipe_all()
         if self.connectome: self.connectome = Connectome()
         if self.workspace: self.workspace.clear()
-        
+
         for name, obj in [
-            ("childhood", self.childhood),
-            ("dev", self.dev),
-            ("emotion", self.emotion),
-            ("identity", self.identity),
-            ("social", self.social),
-            ("reflection", self.reflection),
-            ("motivation", self.motivation),
-            ("cognition", self.cognition),
-            ("curiosity", self.curiosity),
-            ("learning", self.learning),
+            ("childhood", self.childhood), ("dev", self.dev), ("emotion", self.emotion),
+            ("identity", self.identity), ("social", self.social), ("reflection", self.reflection),
+            ("motivation", self.motivation), ("cognition", self.cognition),
+            ("curiosity", self.curiosity), ("learning", self.learning),
             ("personality", self.personality),
         ]:
             try:
@@ -625,103 +550,46 @@ class ResponseEngine:
             except Exception:
                 pass
         if self.evolution:
-            try:
-                self.evolution.wipe()
-            except Exception:
-                pass
+            try: self.evolution.wipe()
+            except Exception: pass
         if self.integrations:
-            try:
-                self.integrations.wipe()
-            except Exception:
-                pass
+            try: self.integrations.wipe()
+            except Exception: pass
         if self.web_knowledge:
-            try:
-                self.web_knowledge.wipe()
-            except Exception:
-                pass
+            try: self.web_knowledge.wipe()
+            except Exception: pass
         try:
             from social.interaction_history import InteractionHistory
             InteractionHistory().wipe()
         except Exception:
             pass
 
-    # ----------------------------------------
-    # Stats / accessors
-    # ----------------------------------------
-    def memory_stats(self):
-        return self.memory.stats()
-
-    def childhood_stats(self):
-        return self.childhood.get_all()
-
-    def childhood_count(self):
-        return self.childhood.count()
-
-    def emotion_stats(self):
-        return self.emotion.get_all()
-
-    def internal_state_stats(self):
-        return self.dev.state.get()
-
-    def identity_stats(self):
-        return self.identity.beliefs()
-
-    def identity_history(self):
-        return self.identity.history_recent(limit=40)
-
-    def social_stats(self):
-        return self.social.model.get()
-
-    def reflection_stats(self):
-        return self.reflection.counts()
-
-    def reflections_recent(self, limit=None):
-        return self.reflection.recent_reflections(limit=limit)
-
-    def experience_reviews_recent(self, limit=None):
-        return self.reflection.recent_experience_reviews(limit=limit)
-
-    def long_term_reflections_recent(self, limit=None):
-        return self.reflection.recent_long_term(limit=limit)
-
-    def drives_stats(self):
-        return self.motivation.get_all()
-
-    def cognition_trace(self):
-        return self.cognition.last_trace()
-
-    def learning_summary(self):
-        return self.learning.error_summary()
-
-    def recent_prediction_errors(self, limit=10):
-        return self.learning.recent_errors(limit=limit)
-
-    def preference_stats(self):
-        return self.learning.preferences()
-
-    def best_behaviors(self, limit=5):
-        return self.learning.best_behaviors(limit=limit)
-
-    def worst_behaviors(self, limit=5):
-        return self.learning.worst_behaviors(limit=limit)
-
-    def personality_stats(self):
-        return self.personality.traits()
-
-    def values_stats(self):
-        return self.evolution.get_values() if self.evolution else {}
-
-    def value_history(self, limit=None):
-        return self.evolution.get_value_history(limit=limit) if self.evolution else []
-
-    def evolution_personality(self):
-        return self.evolution.get_personality() if self.evolution else {}
-
-    def evolution_preferences(self):
-        return self.evolution.get_preferences() if self.evolution else []
-
-    def integration_stats(self):
-        return self.integrations.stats() if self.integrations else {}
+    # --- Stats / accessors ---
+    def memory_stats(self): return self.memory.stats()
+    def childhood_stats(self): return self.childhood.get_all()
+    def childhood_count(self): return self.childhood.count()
+    def emotion_stats(self): return self.emotion.get_all()
+    def internal_state_stats(self): return self.dev.state.get()
+    def identity_stats(self): return self.identity.beliefs()
+    def identity_history(self): return self.identity.history_recent(limit=40)
+    def social_stats(self): return self.social.model.get()
+    def reflection_stats(self): return self.reflection.counts()
+    def reflections_recent(self, limit=None): return self.reflection.recent_reflections(limit=limit)
+    def experience_reviews_recent(self, limit=None): return self.reflection.recent_experience_reviews(limit=limit)
+    def long_term_reflections_recent(self, limit=None): return self.reflection.recent_long_term(limit=limit)
+    def drives_stats(self): return self.motivation.get_all()
+    def cognition_trace(self): return self.cognition.last_trace()
+    def learning_summary(self): return self.learning.error_summary()
+    def recent_prediction_errors(self, limit=10): return self.learning.recent_errors(limit=limit)
+    def preference_stats(self): return self.learning.preferences()
+    def best_behaviors(self, limit=5): return self.learning.best_behaviors(limit=limit)
+    def worst_behaviors(self, limit=5): return self.learning.worst_behaviors(limit=limit)
+    def personality_stats(self): return self.personality.traits()
+    def values_stats(self): return self.evolution.get_values() if self.evolution else {}
+    def value_history(self, limit=None): return self.evolution.get_value_history(limit=limit) if self.evolution else []
+    def evolution_personality(self): return self.evolution.get_personality() if self.evolution else {}
+    def evolution_preferences(self): return self.evolution.get_preferences() if self.evolution else []
+    def integration_stats(self): return self.integrations.stats() if self.integrations else {}
 
     def goals_stats(self):
         if getattr(self.dev, "goals", None) is None:
@@ -746,9 +614,6 @@ class ResponseEngine:
         except Exception:
             return {}
 
-    # ----------------------------------------
-    # V1.7 — Web
-    # ----------------------------------------
     def web_stats(self):
         return self.web_knowledge.stats() if self.web_knowledge else {}
 
@@ -770,9 +635,6 @@ class ResponseEngine:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # ----------------------------------------
-    # V1.8 — Extension bridge
-    # ----------------------------------------
     def ingest_extension_content(self, platform: str, url: str, content: str) -> dict:
         if not self.web_knowledge or not self.web_learning:
             return {"ok": False, "error": "web module unavailable"}
@@ -783,11 +645,6 @@ class ResponseEngine:
             source = url or f"extension://{platform}"
             learned = self.web_learning.process(title, content, source)
             res = self.web_knowledge.ingest(learned)
-            return {
-                "ok": True,
-                "is_new": res.get("is_new"),
-                "title": title,
-                "platform": platform,
-            }
+            return {"ok": True, "is_new": res.get("is_new"), "title": title, "platform": platform}
         except Exception as e:
             return {"ok": False, "error": str(e)}
