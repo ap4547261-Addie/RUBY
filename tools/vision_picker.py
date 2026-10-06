@@ -31,8 +31,10 @@ class VisionPicker:
         f = e.files[0]
         if not f.path:
             return
-        # Run the async handler
-        asyncio.create_task(self._handle_file(f.path))
+        # 🔥 FIX: Use page.run_task() instead of asyncio.create_task().
+        # Flet's page.run_task schedules the coroutine on the event loop
+        # that Flet itself manages — this works from sync callbacks.
+        self.page.run_task(self._handle_file, f.path)
 
     async def _handle_file(self, path: str):
         ext = os.path.splitext(path)[1].lower()
