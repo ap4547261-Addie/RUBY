@@ -31,11 +31,10 @@ class Development:
             self.goals = None
 
     def _apply_deltas(self, deltas):
-        """Apply deltas directly. No caps, no floors."""
+        """Apply deltas directly using InternalState.adjust(). No caps, no floors."""
         for key, delta in deltas.items():
             try:
-                current = self.state.get().get(key, 0.0)
-                self.state.set(key, current + delta)
+                self.state.adjust(key, delta)
             except Exception as e:
                 print(f"⚠️ development._apply_deltas failed for {key}: {e}")
 
