@@ -1,7 +1,7 @@
+# ruby_core/development.py
 from datetime import datetime
 from ruby_core.internal_state import InternalState
 
-# V1.9 — goals wiring
 try:
     from ruby_core.goals import Goals
     GOALS_AVAILABLE = True
@@ -21,7 +21,6 @@ class Development:
         self.user_name = user_name
         self.state = InternalState(user_name=user_name)
 
-        # V1.9 — direction of growth
         if GOALS_AVAILABLE:
             try:
                 self.goals = Goals(user_name=user_name)
@@ -30,6 +29,15 @@ class Development:
                 self.goals = None
         else:
             self.goals = None
+
+    def _apply_deltas(self, deltas):
+        """Apply deltas directly. No caps, no floors."""
+        for key, delta in deltas.items():
+            try:
+                current = self.state.get().get(key, 0.0)
+                self.state.set(key, current + delta)
+            except Exception as e:
+                print(f"⚠️ development._apply_deltas failed for {key}: {e}")
 
     def tick(self):
         s = self.state.get()
@@ -45,37 +53,31 @@ class Development:
 
         deltas = {}
 
-        # energy regenerates proportionally to time passed — no cap
         if hours_passed > 0:
             deltas["energy"] = hours_passed * 1.0
 
-        # irritation decays proportionally — no floor except reaching 0
         if s["irritation"] > 0:
             decay = s["irritation"] * 0.1 * hours_passed
             deltas["irritation"] = -min(s["irritation"], decay)
 
-        # tension decays slower
         if s["tension"] > 0:
             decay = s["tension"] * 0.05 * hours_passed
             deltas["tension"] = -min(s["tension"], decay)
 
-        # warmth cools only during long absence — no floor
         if s["warmth"] > 0 and hours_passed > 12:
             decay = s["warmth"] * 0.02 * hours_passed
             deltas["warmth"] = -min(s["warmth"], decay)
 
         if deltas:
-            self.state.change(**deltas)
+            self._apply_deltas(deltas)
 
     def on_message(self, user_message, ruby_reply, trust, attachment):
         deltas = {}
         text = user_message.lower()
         word_count = len(user_message.split())
 
-        # --- warmth grows continuously from trust + attachment, no cap ---
         deltas["warmth"] = (trust * 0.02) + (attachment * 0.05)
 
-        # --- energy cost per message ---
         if word_count > 20:
             deltas["energy"] = -1.0
         elif word_count > 10:
@@ -83,20 +85,17 @@ class Development:
         else:
             deltas["energy"] = -0.1
 
-        # --- irritation from rudeness ---
         if any(w in text for w in ["shut up", "stupid", "dumb", "idiot", "hate you"]):
             deltas["irritation"] = +2.5
 
-        # --- tension from pushy behavior ---
         if any(w in text for w in ["send me", "show me now", "do this for me", "you must", "you have to"]):
             deltas["tension"] = +1.5
 
-        # --- calm from honesty ---
         if any(m in text for m in ["i feel", "i'm scared", "i lost", "i miss", "i love you", "i'm sad"]):
             deltas["irritation"] = -1.0
             deltas["tension"] = -0.5
 
-        self.state.change(**deltas)
+        self._apply_deltas(deltas)
 
     def describe(self):
         return self.state.describe()
@@ -104,7 +103,6 @@ class Development:
     def wipe(self):
         self.state.wipe()
 
-        # V1.9 — goals reset (seed survives)
         if getattr(self, "goals", None) is not None:
             try:
                 self.goals.wipe()
