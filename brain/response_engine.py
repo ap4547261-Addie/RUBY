@@ -373,7 +373,7 @@ class ResponseEngine:
             self.connectome.update_node("global_workspace", 0.95)
 
         # 🔥 SAFETY: Cap context so the model doesn't overflow
-        MAX_CONTEXT_CHARS = 6000
+        MAX_CONTEXT_CHARS = 2500
         if len(context) > MAX_CONTEXT_CHARS:
             print(f"⚠️ Context too big ({len(context)} chars), trimming to {MAX_CONTEXT_CHARS}")
             context = context[:MAX_CONTEXT_CHARS] + "\n[...truncated...]"
