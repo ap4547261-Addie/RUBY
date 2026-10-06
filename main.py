@@ -2,11 +2,31 @@
 import os
 import sys
 import io
+import logging
+
+# ============================================================
+# 🔥 WINDOWS ENCODING FIX — MUST run before any other import
+# ============================================================
+os.environ["PYTHONIOENCODING"] = "utf-8"
+os.environ["PYTHONUTF8"] = "1"
 
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
+    # Fix Python's logging module (uses its own stream, not sys.stdout)
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+        force=True,
+    )
+
+# ============================================================
+# Regular imports (after encoding is fixed)
+# ============================================================
 import shutil
 import asyncio
 import re
