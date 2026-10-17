@@ -3,6 +3,7 @@
 
 import os
 import json
+from datetime import datetime
 
 
 def _state_path(user_name: str) -> str:
@@ -20,22 +21,42 @@ class InternalState:
             "tension": 0.0,
             "irritation": 0.0,
         }
+        # When the state was last written. Kept OUT of _data so get() only
+        # ever returns the four numeric mood values other modules expect.
+        self._last_updated = None
         self._load()
 
     def _load(self):
         try:
             if os.path.exists(self.path):
                 with open(self.path, "r", encoding="utf-8") as f:
-                    self._data.update(json.load(f))
+                    loaded = json.load(f)
+                self._last_updated = loaded.pop("last_updated", None)
+                self._data.update(
+                    {k: v for k, v in loaded.items() if k in self._data}
+                )
         except Exception as e:
             print(f"⚠️ InternalState load failed: {e}")
 
     def _save(self):
         try:
+            self._last_updated = datetime.now().isoformat(timespec="seconds")
+            payload = dict(self._data)
+            payload["last_updated"] = self._last_updated
             with open(self.path, "w", encoding="utf-8") as f:
-                json.dump(self._data, f)
+                json.dump(payload, f)
         except Exception as e:
             print(f"⚠️ InternalState save failed: {e}")
+
+    def hours_since_update(self) -> float:
+        """Hours since the state was last saved (0.0 if never saved)."""
+        if not self._last_updated:
+            return 0.0
+        try:
+            last = datetime.fromisoformat(self._last_updated)
+            return max(0.0, (datetime.now() - last).total_seconds() / 3600)
+        except Exception:
+            return 0.0
 
     def get(self) -> dict:
         return dict(self._data)
@@ -43,6 +64,7 @@ class InternalState:
     def set(self, key: str, value: float):
         if key in self._data:
             self._data[key] = max(0.0, min(1.0, float(value)))
+            self._save()
 
     def adjust(self, key: str, delta: float):
         if key in self._data:
