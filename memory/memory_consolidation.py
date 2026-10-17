@@ -155,7 +155,11 @@ class MemoryConsolidation:
                     found.append(row)
         if found:
             u, r, _ = found[0]
-            parts.append(f'You remember {display} saying "{u}" and you answered "{r}".')
+            if u:
+                parts.append(f'You remember {display} saying "{u}" and you answered "{r}".')
+            else:
+                # a text Ruby started herself (stored with an empty user message)
+                parts.append(f'You remember texting {display} first once: "{r}".')
 
         # 3. Emotional state — COLD for a long time
         s = self.relationship.get_state()
