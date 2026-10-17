@@ -26,6 +26,11 @@ DEFAULT_SETTINGS = {
     "threads": 4,
 
     # -------------------------
+    # Behaviour
+    # -------------------------
+    "proactive_enabled": True,   # Ruby may text first (see brain/proactive.py)
+
+    # -------------------------
     # Appearance
     # -------------------------
     "theme": "dark",
