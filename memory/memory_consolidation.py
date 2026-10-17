@@ -56,6 +56,7 @@ class MemoryConsolidation:
             "shut up", "stupid", "dumb", "idiot",
             "you're useless", "you are useless",
             "do it now", "obey", "command",
+            "you're ugly", "you are ugly", "you're weird", "you are weird",
         ])
 
     def _is_pushy(self, text):
