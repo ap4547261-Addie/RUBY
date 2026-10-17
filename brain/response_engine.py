@@ -13,6 +13,13 @@ from cognition.cognition_engine import CognitionEngine
 from cognition.curiosity import Curiosity
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
+from brain.time_awareness import time_context
+
+try:
+    from learning.style_learning import StyleLearning
+except Exception as e:
+    print(f"⚠️ StyleLearning not available: {e}")
+    StyleLearning = None
 
 try:
     from brain.connectome import Connectome
@@ -87,6 +94,16 @@ class ResponseEngine:
         self.learning = LearningEngine(user_name=user_name)
         self.personality = PersonalityDevelopment(user_name=user_name)
 
+        # Learns which of her own moves (tease, warmth, question...) land.
+        self._reply_seq = 0           # bumped each time a reply is stored
+        self._style_scored_seq = 0    # last reply already scored
+        self.style = None
+        if StyleLearning is not None:
+            try:
+                self.style = StyleLearning(user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ StyleLearning init failed: {e}")
+
         if BLUEPRINT_AVAILABLE:
             self.connectome = Connectome()
             self.workspace = GlobalWorkspace()
@@ -145,14 +162,161 @@ class ResponseEngine:
         else:
             self.story_cache = None
 
+    # ------------------------------------------------------------
+    # Small helpers shared by respond() and respond_fast()
+    # ------------------------------------------------------------
+    @staticmethod
+    def _is_error_reply(reply: str) -> bool:
+        """Replies produced by failures — never learn from or store these."""
+        r = (reply or "").strip()
+        return (not r) or r.startswith((
+            "[GEN ERROR]", "[GENERATION ERROR]", "[FAST ERROR]",
+            "My brain isn't loaded",
+        ))
+
+    @staticmethod
+    def _trim_block(text: str, limit: int) -> str:
+        """Shorten one context block, ending on a sentence boundary when possible."""
+        if len(text) <= limit:
+            return text
+        cut = text[:limit]
+        idx = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! "), cut.rfind("\n"))
+        if idx > limit * 0.5:
+            cut = cut[:idx + 1]
+        return cut.rstrip()
+
+    def _mood_label(self) -> str:
+        """Coarse mood used to key style learning (few buckets, so it learns fast)."""
+        try:
+            s = self.dev.state.get()
+            if s["irritation"] > 0.5:
+                return "irritated"
+            if s["energy"] < 0.3:
+                return "tired"
+            if s["warmth"] > 0.7:
+                return "warm"
+            if s["warmth"] < 0.3:
+                return "distant"
+        except Exception:
+            pass
+        return "neutral"
+
+    def _time_line(self) -> str:
+        """Clock + gap since the previous exchange. Call BEFORE memory.process()."""
+        try:
+            rows = self.memory.episodic.get_recent(limit=1)
+            last_ts = rows[0][2] if rows else None
+            return time_context(last_ts)
+        except Exception as e:
+            print(f"⚠️ time_context failed: {e}")
+            return ""
+
+    def _observe_style(self, user_message: str):
+        """Score how the user reacted to Ruby's previous reply."""
+        if self.style is None:
+            return
+        # Score each reply only once, even if the user's next message fails
+        # and they retry (otherwise the same reply is counted twice).
+        if self._reply_seq == self._style_scored_seq:
+            return
+        self._style_scored_seq = self._reply_seq
+        try:
+            prev = None
+            for m in reversed(self.short_term.get_messages()):
+                if m["role"] == "assistant":
+                    prev = m["content"]
+                    break
+            if prev and not self._is_error_reply(prev):
+                self.style.observe(self._mood_label(), "", prev, user_message)
+        except Exception as e:
+            print(f"⚠️ style.observe failed: {e}")
+
+    def _style_context(self) -> str:
+        if self.style is None:
+            return ""
+        try:
+            mood = self._mood_label()
+            text = self.style.describe(mood)
+            if not text:
+                return ""
+            best = self.style.best_moves(mood, 1)
+            if best:
+                for ex in self.style.recent_landed(best[0]["move"], 2):
+                    said = (ex.get("said") or "")[:120]
+                    if said:
+                        text += f'\nA line of yours that landed before: "{said}"'
+            return "What has landed with them before:\n" + text
+        except Exception as e:
+            print(f"⚠️ style context failed: {e}")
+            return ""
+
+    def _update_after_reply(self, user_message: str, reply: str):
+        """Cheap state updates that must happen for EVERY turn, fast or full."""
+        try:
+            self.dev.tick()
+            rel = self.memory.relationship.get_state()
+            self.dev.on_message(user_message, reply, trust=rel["trust"], attachment=rel["attachment"])
+        except Exception as e:
+            print(f"⚠️ dev.on_message failed: {e}")
+
+        try:
+            rel = self.memory.relationship.get_state()
+            inner = self.dev.state.get()
+            self.emotion.process(user_message, context={
+                "trust": rel["trust"], "attachment": rel["attachment"],
+                "warmth": inner["warmth"], "irritation": inner["irritation"],
+                "message_count": rel["message_count"],
+            })
+        except Exception as e:
+            print(f"⚠️ emotion.process failed: {e}")
+
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
+        """
+        Fast path for greetings / one-word messages.
+
+        Used to run with NO context, so "hey" got the same reply from a
+        stranger and from someone she's attached to, and nothing was saved.
+        Now it gets a LIGHT context (hour, gap, relationship tone, body,
+        feelings) and still updates her memory and mood — but skips the
+        expensive layers (web, childhood, identity, cognition...).
+        """
+        self._observe_style(user_message)
+
+        parts = []
+        try:
+            t = self._time_line()
+            if t:
+                parts.append(t)
+        except Exception:
+            pass
+        try:
+            # empty message -> no keyword episode search, just facts + relationship tone
+            rel_ctx = self.memory.build_context("")
+            if rel_ctx:
+                parts.append(rel_ctx)
+        except Exception as e:
+            print(f"⚠️ fast memory context failed: {e}")
+        try:
+            parts.append(f"Your body and mood: {self.dev.describe()}")
+            parts.append(f"Your feelings right now: {self.emotion_expr.describe(self.emotion.get_all())}")
+        except Exception as e:
+            print(f"⚠️ fast mood context failed: {e}")
+        try:
+            style_ctx = self._style_context()
+            if style_ctx:
+                parts.append(style_ctx)
+        except Exception:
+            pass
+
+        context = "\n\n".join(p for p in parts if p)
+
         if "{context}" in ruby_prompt:
             try:
-                description = ruby_prompt.format(user_name=self.user_name, context="")
+                description = ruby_prompt.format(user_name=self.user_name, context=context)
             except Exception:
-                description = ruby_prompt
+                description = f"{ruby_prompt}\n\nWhat you know right now:\n{context}"
         else:
-            description = ruby_prompt
+            description = f"{ruby_prompt}\n\nWhat you know right now:\n{context}" if context else ruby_prompt
 
         self.short_term.add("user", user_message)
         try:
@@ -164,7 +328,19 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ respond_fast failed: {e}")
             reply = "[FAST ERROR] " + str(e)
+
+        if self._is_error_reply(reply):
+            # don't let errors pollute history, memory or style stats
+            self.short_term.discard_last()
+            return reply
+
         self.short_term.add("assistant", reply)
+        self._reply_seq += 1
+        try:
+            self.memory.process(user_message, reply)
+        except Exception as e:
+            print(f"⚠️ fast memory.process failed: {e}")
+        self._update_after_reply(user_message, reply)
         return reply
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
@@ -198,7 +374,11 @@ class ResponseEngine:
                 "web", "learning", "relationship",
             }
 
-        context = ""
+        # Score how they reacted to her last reply, then learn from it.
+        self._observe_style(user_message)
+
+        # Time comes first: it's short, and it's the first thing a person notices.
+        context = self._time_line()
 
         if "episodic" in read_layers or "relationship" in read_layers:
             try:
@@ -318,6 +498,11 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ learning.describe failed: {e}")
 
+        style_ctx = self._style_context()
+        if style_ctx:
+            context = f"{context}\n\n{style_ctx}"
+            if self.workspace: self.workspace.broadcast("style", style_ctx)
+
         curiosity_instruction = ""
         try:
             if self.curiosity.should_ask():
@@ -366,17 +551,27 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ cognition.process failed: {e}")
 
+        # NOTE: the workspace used to be appended here too, which put every
+        # layer in the prompt twice and then cut off the end. Every layer is
+        # already in `context`; the workspace is only kept for the brain monitor.
         if self.workspace:
-            workspace_context = self.workspace.build_prompt_context()
-            if workspace_context:
-                context = f"{context}\n\n--- GLOBAL WORKSPACE ---\n{workspace_context}"
             self.connectome.update_node("global_workspace", 0.95)
 
-        # 🔥 SAFETY: Cap context so the model doesn't overflow
-        MAX_CONTEXT_CHARS = 2500
+        # SAFETY: cap context so the model doesn't overflow. Trim whole
+        # blocks (never mid-sentence); a block that doesn't fit is skipped
+        # so shorter, later blocks can still make it in.
+        MAX_CONTEXT_CHARS = 3500
+        MAX_BLOCK_CHARS = 1200   # one huge layer (e.g. all 90 beliefs) must not crowd out the rest
         if len(context) > MAX_CONTEXT_CHARS:
-            print(f"⚠️ Context too big ({len(context)} chars), trimming to {MAX_CONTEXT_CHARS}")
-            context = context[:MAX_CONTEXT_CHARS] + "\n[...truncated...]"
+            blocks = [self._trim_block(b.strip(), MAX_BLOCK_CHARS)
+                      for b in context.split("\n\n") if b.strip()]
+            kept, used = [], 0
+            for b in blocks:
+                if used + len(b) + 2 <= MAX_CONTEXT_CHARS or not kept:
+                    kept.append(b)
+                    used += len(b) + 2
+            print(f"⚠️ Context too big ({len(context)} chars), kept {len(kept)}/{len(blocks)} blocks")
+            context = "\n\n".join(kept)
 
         if "{context}" in ruby_prompt:
             try:
@@ -406,26 +601,15 @@ class ResponseEngine:
             print(f"⚠️ brain.generate failed: {e}")
             reply = "[GENERATION ERROR] " + str(e)
 
+        if self._is_error_reply(reply):
+            # failed generation: don't store it, learn from it, or show it to the model next turn
+            self.short_term.discard_last()
+            return reply
+
         self.short_term.add("assistant", reply)
+        self._reply_seq += 1
         self.memory.process(user_message, reply)
-
-        try:
-            self.dev.tick()
-            rel = self.memory.relationship.get_state()
-            self.dev.on_message(user_message, reply, trust=rel["trust"], attachment=rel["attachment"])
-        except Exception as e:
-            print(f"⚠️ dev.on_message failed: {e}")
-
-        try:
-            rel = self.memory.relationship.get_state()
-            inner = self.dev.state.get()
-            self.emotion.process(user_message, context={
-                "trust": rel["trust"], "attachment": rel["attachment"],
-                "warmth": inner["warmth"], "irritation": inner["irritation"],
-                "message_count": rel["message_count"],
-            })
-        except Exception as e:
-            print(f"⚠️ emotion.process failed: {e}")
+        self._update_after_reply(user_message, reply)
 
         try:
             rel = self.memory.relationship.get_state()
