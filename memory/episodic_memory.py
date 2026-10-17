@@ -30,6 +30,18 @@ class EpisodicMemory:
         conn.close()
         return rows
 
+    def last_user_timestamp(self):
+        """When the USER last wrote (ignores texts Ruby started herself, which
+        are stored with an empty user_message). None if they never have."""
+        conn = database.get_connection()
+        c = conn.cursor()
+        c.execute(
+            "SELECT timestamp FROM episodes WHERE user_message != '' ORDER BY id DESC LIMIT 1"
+        )
+        row = c.fetchone()
+        conn.close()
+        return row[0] if row else None
+
     def search(self, keyword, limit=5):
         if not keyword or len(keyword) < 3:
             return []
