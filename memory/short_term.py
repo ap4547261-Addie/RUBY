@@ -14,6 +14,11 @@ class ShortTermMemory:
         if len(self.messages) > self.max_messages:
             self.messages.pop(0)
 
+    def discard_last(self):
+        """Drop the newest message (used when generation failed)."""
+        if self.messages:
+            self.messages.pop()
+
     def get_messages(self):
         return self.messages.copy()
 
