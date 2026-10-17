@@ -1,6 +1,7 @@
 # ruby_core/development.py
 from datetime import datetime
 from ruby_core.internal_state import InternalState
+from emotion.compliments import compliment_kind
 
 try:
     from ruby_core.goals import Goals
@@ -88,6 +89,11 @@ class Development:
         if any(m in text for m in ["i feel", "i'm scared", "i lost", "i miss", "i love you", "i'm sad"]):
             deltas["irritation"] = -1.0
             deltas["tension"] = -0.5
+
+        # A compliment lifts her mood and takes the edge off.
+        if compliment_kind(user_message):
+            deltas["warmth"] = deltas.get("warmth", 0) + 0.1
+            deltas["irritation"] = deltas.get("irritation", 0) - 0.3
 
         self._apply_deltas(deltas)
 
