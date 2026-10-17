@@ -1,4 +1,6 @@
 # brain/response_engine.py
+import os
+from datetime import datetime, timedelta
 from memory.short_term import ShortTermMemory
 from memory.memory_consolidation import MemoryConsolidation
 from memory.childhood_memory import ChildhoodMemory
@@ -20,6 +22,12 @@ try:
 except Exception as e:
     print(f"⚠️ StyleLearning not available: {e}")
     StyleLearning = None
+
+try:
+    from brain.proactive import ProactiveEngine
+except Exception as e:
+    print(f"⚠️ ProactiveEngine not available: {e}")
+    ProactiveEngine = None
 
 try:
     from brain.connectome import Connectome
@@ -103,6 +111,15 @@ class ResponseEngine:
                 self.style = StyleLearning(user_name=user_name)
             except Exception as e:
                 print(f"⚠️ StyleLearning init failed: {e}")
+
+        # Decides when Ruby texts first (see brain/proactive.py)
+        self.proactive = None
+        self._last_proactive_attempt = None
+        if ProactiveEngine is not None:
+            try:
+                self.proactive = ProactiveEngine(user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ ProactiveEngine init failed: {e}")
 
         if BLUEPRINT_AVAILABLE:
             self.connectome = Connectome()
@@ -204,9 +221,8 @@ class ResponseEngine:
     def _time_line(self) -> str:
         """Clock + gap since the previous exchange. Call BEFORE memory.process()."""
         try:
-            rows = self.memory.episodic.get_recent(limit=1)
-            last_ts = rows[0][2] if rows else None
-            return time_context(last_ts)
+            # the gap is measured from the USER's last message (not from a text Ruby sent first)
+            return time_context(self.memory.episodic.last_user_timestamp())
         except Exception as e:
             print(f"⚠️ time_context failed: {e}")
             return ""
@@ -341,6 +357,118 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ fast memory.process failed: {e}")
         self._update_after_reply(user_message, reply)
+        return reply
+
+    # ------------------------------------------------------------
+    # Ruby texting FIRST
+    # ------------------------------------------------------------
+    def plan_proactive(self, enabled: bool = True):
+        """
+        Cheap check (a few SQLite reads) — safe to call once a minute.
+        Returns a plan dict {"reason", "instruction", "idle_hours"} or None.
+        """
+        if self.proactive is None or not enabled:
+            return None
+        try:
+            now = datetime.now()
+            # after a failed/duplicate attempt, don't hammer the model every minute
+            retry = timedelta(minutes=1 if os.environ.get("RUBY_PROACTIVE_DEBUG") == "1" else 10)
+            if self._last_proactive_attempt and now - self._last_proactive_attempt < retry:
+                return None
+            ts = self.memory.episodic.last_user_timestamp()
+            last = datetime.fromisoformat(ts) if ts else None
+            rel = self.memory.relationship.get_state()
+            return self.proactive.decide(now, last, rel, self._mood_label(), enabled=True)
+        except Exception as e:
+            print(f"⚠️ plan_proactive failed: {e}")
+            return None
+
+    def respond_proactive(self, ruby_prompt: str, plan: dict):
+        """
+        Ruby starts the conversation. Returns her text, or None if nothing
+        should be sent (error, or she'd be repeating herself).
+        Nothing is written as a "user message": the text is stored with an
+        empty user_message so it can't distort relationship stats.
+        """
+        self._last_proactive_attempt = datetime.now()
+
+        parts = []
+        try:
+            t = self._time_line()
+            if t:
+                parts.append(t)
+        except Exception:
+            pass
+        try:
+            rel_ctx = self.memory.build_context("")
+            if rel_ctx:
+                parts.append(rel_ctx)
+        except Exception as e:
+            print(f"⚠️ proactive memory context failed: {e}")
+        try:
+            parts.append(f"Your body and mood: {self.dev.describe()}")
+            parts.append(f"Your feelings right now: {self.emotion_expr.describe(self.emotion.get_all())}")
+        except Exception as e:
+            print(f"⚠️ proactive mood context failed: {e}")
+        try:
+            rows = self.memory.episodic.get_recent(limit=3)
+            lines = []
+            for u, r, _ts in reversed(rows):
+                if u:
+                    lines.append(f'- they said: "{u[:90]}" / you said: "{r[:90]}"')
+            if lines:
+                parts.append("The last things you two talked about:\n" + "\n".join(lines))
+        except Exception:
+            pass
+        try:
+            style_ctx = self._style_context()
+            if style_ctx:
+                parts.append(style_ctx)
+        except Exception:
+            pass
+
+        context = "\n\n".join(p for p in parts if p)
+        description = (
+            f"{ruby_prompt}\n\nWhat you know right now:\n{context}\n\n"
+            f"YOU ARE TEXTING FIRST — they did not write to you. {plan.get('instruction', '')} "
+            f"Never mention that you were told or prompted to do this."
+        )
+
+        # the model needs a final user turn; this stand-in is NOT stored anywhere
+        history = self.short_term.get_messages() + [
+            {"role": "user", "content": "(They haven't written. You decide to text them first.)"}
+        ]
+        try:
+            reply = self.brain.generate(
+                description=description, history=history, user_name=self.user_name,
+            )
+        except Exception as e:
+            print(f"⚠️ respond_proactive failed: {e}")
+            return None
+
+        if self._is_error_reply(reply):
+            return None
+
+        # never say the same thing twice in a row
+        seen = {m["content"].strip().lower() for m in self.short_term.get_messages()
+                if m["role"] == "assistant"}
+        try:
+            seen |= {r.strip().lower() for _u, r, _t in self.memory.episodic.get_recent(limit=5)}
+        except Exception:
+            pass
+        if reply.strip().lower() in seen:
+            print("ℹ️ proactive text was a repeat — dropped")
+            return None
+
+        self.short_term.add("assistant", reply)
+        self._reply_seq += 1
+        try:
+            self.memory.episodic.remember("", reply, importance=2)
+        except Exception as e:
+            print(f"⚠️ proactive episode save failed: {e}")
+        if self.proactive is not None:
+            self.proactive.record_sent()
+        print(f"💌 Ruby texted first ({plan.get('reason')})")
         return reply
 
     def respond(self, user_message: str, ruby_prompt: str) -> str:
@@ -741,6 +869,9 @@ class ResponseEngine:
             except Exception: pass
         if self.web_knowledge:
             try: self.web_knowledge.wipe()
+            except Exception: pass
+        if self.proactive:
+            try: self.proactive.wipe()
             except Exception: pass
         try:
             from social.interaction_history import InteractionHistory
