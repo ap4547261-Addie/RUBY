@@ -98,6 +98,52 @@ def main(page: ft.Page):
                 await asyncio.sleep(min(2.0, 0.4 + len(bubble) * 0.025))
             add_message("Ruby", bubble)
 
+    # The local model can only do one thing at a time. This flag makes the
+    # chat, the vision picker and Ruby's own "text first" loop take turns.
+    brain_busy = {"v": False}
+
+    async def acquire_brain():
+        while brain_busy["v"]:
+            await asyncio.sleep(0.2)
+        brain_busy["v"] = True      # no await between the check and the set -> safe
+
+    def release_brain():
+        brain_busy["v"] = False
+
+    async def deliver_reply(reply):
+        """Show a reply as bubbles; if it carries [SEND_SELFIE:filter], send the picture too."""
+        selfie_match = re.search(r"\[SEND_SELFIE:\s*([^\]]+)\]", reply)
+        if not selfie_match:
+            await ruby_say(reply)
+            return
+        filter_name = selfie_match.group(1).strip()
+        spoken = re.sub(r"\[SEND_SELFIE:[^\]]+\]", "", reply).strip()
+        await ruby_say(spoken)
+        try:
+            from PIL import Image
+            from tools.snapchat_filters import apply_filter, FILTERS
+            matched = None
+            for f in FILTERS:
+                if f.lower() == filter_name.lower():
+                    matched = f
+                    break
+            chosen = matched if matched else "none"
+            base_path = None
+            for cand in ["ruby_base.jpg", "ruby_base.png", "RUBY_03.png", "RUBY/RUBY_03.png", "RUBY/RUBY_03.jpg"]:
+                if os.path.exists(cand):
+                    base_path = cand
+                    break
+            if base_path:
+                base_img = Image.open(base_path).convert("RGB")
+                filtered = apply_filter(base_img, chosen)
+                os.makedirs("ruby_selfies", exist_ok=True)
+                out_path = f"ruby_selfies/ruby_{chosen.replace(' ', '_')}.jpg"
+                filtered.save(out_path, quality=90)
+                chat.controls.append(ft.Image(src=out_path, width=300, height=300, border_radius=10))
+                page.update()
+        except Exception as ex:
+            print(f"⚠️ Selfie generation error: {ex}")
+
     def show_snack(text):
         page.snack_bar = ft.SnackBar(ft.Text(text))
         page.snack_bar.open = True
@@ -112,9 +158,10 @@ def main(page: ft.Page):
             ep = EpisodicMemory()
             rows = ep.get_recent(limit=200)
             for user_msg, ruby_reply, _ts in reversed(rows):
-                chat.controls.append(
-                    ft.Text(f"You: {user_msg}", selectable=True, size=16, color=ft.Colors.CYAN_400)
-                )
+                if user_msg:   # empty = a text Ruby started herself
+                    chat.controls.append(
+                        ft.Text(f"You: {user_msg}", selectable=True, size=16, color=ft.Colors.CYAN_400)
+                    )
                 chat.controls.append(
                     ft.Text(f"Ruby: {ruby_reply}", selectable=True, size=16, color=ft.Colors.PINK_400)
                 )
@@ -241,43 +288,15 @@ def main(page: ft.Page):
         base_prompt = build_ruby_prompt(interaction_depth=interaction_depth)
         system2.ruby_prompt = base_prompt
 
+        await acquire_brain()
         try:
             reply = await asyncio.to_thread(system2.think, prompt, "normal")
         except Exception as ex:
             reply = f"⚠️ vision response error: {ex}"
+        finally:
+            release_brain()
 
-        selfie_match = re.search(r"\[SEND_SELFIE:\s*([^\]]+)\]", reply)
-        if selfie_match:
-            filter_name = selfie_match.group(1).strip()
-            spoken = re.sub(r"\[SEND_SELFIE:[^\]]+\]", "", reply).strip()
-            await ruby_say(spoken)
-            try:
-                from PIL import Image
-                from tools.snapchat_filters import apply_filter, FILTERS
-                matched = None
-                for f in FILTERS:
-                    if f.lower() == filter_name.lower():
-                        matched = f
-                        break
-                chosen = matched if matched else "none"
-                base_path = None
-                for cand in ["ruby_base.jpg", "ruby_base.png", "RUBY_03.png", "RUBY/RUBY_03.png", "RUBY/RUBY_03.jpg"]:
-                    if os.path.exists(cand):
-                        base_path = cand
-                        break
-                if base_path:
-                    base_img = Image.open(base_path).convert("RGB")
-                    filtered = apply_filter(base_img, chosen)
-                    os.makedirs("ruby_selfies", exist_ok=True)
-                    out_path = f"ruby_selfies/ruby_{chosen.replace(' ', '_')}.jpg"
-                    filtered.save(out_path, quality=90)
-                    chat.controls.append(
-                        ft.Image(src=out_path, width=300, height=300, border_radius=10)
-                    )
-            except Exception as ex:
-                print(f"⚠️ Selfie in vision turn failed: {ex}")
-        else:
-            await ruby_say(reply)
+        await deliver_reply(reply)
 
         status.value = "🧠 Ruby is ready."
         page.update()
@@ -321,6 +340,10 @@ def main(page: ft.Page):
             value=str(settings.get("context_size", 4096)),
             keyboard_type=ft.KeyboardType.NUMBER,
             bgcolor="#18181C", color=ft.Colors.WHITE, border_color="#3A3A46",
+        )
+        proactive_switch = ft.Switch(
+            label="Ruby can text first",
+            value=bool(settings.get("proactive_enabled", True)),
         )
         threads_field = ft.TextField(
             label="Threads",
@@ -775,6 +798,7 @@ def main(page: ft.Page):
                 "user_email": email_field.value.strip(),
                 "context_size": ctx,
                 "threads": thr,
+                "proactive_enabled": bool(proactive_switch.value),
             })
             status.value = "✅ Settings saved. Restart to apply name change."
             page.close(settings_dialog)
@@ -827,7 +851,7 @@ def main(page: ft.Page):
                     model_name_label,
                     ft.ElevatedButton("Choose Model File", icon=ft.Icons.UPLOAD_FILE,
                                       on_click=pick_model, width=340),
-                    context_field, threads_field,
+                    context_field, threads_field, proactive_switch,
                     ft.Divider(),
 
                     ft.Text("💭 Memory", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
@@ -938,6 +962,7 @@ def main(page: ft.Page):
             status.value = "💭 Ruby is thinking..."
         page.update()
 
+        await acquire_brain()
         try:
             system2.ruby_prompt = base_prompt
             if route == "trivial":
@@ -947,39 +972,12 @@ def main(page: ft.Page):
         except Exception as ex:
             reply = f"⚠️ error: {ex}"
             print(f"❌ respond error: {ex}")
+        finally:
+            release_brain()
 
         status.value = "🧠 Ruby is ready."
 
-        selfie_match = re.search(r"\[SEND_SELFIE:\s*([^\]]+)\]", reply)
-        if selfie_match:
-            filter_name = selfie_match.group(1).strip()
-            spoken = re.sub(r"\[SEND_SELFIE:[^\]]+\]", "", reply).strip()
-            await ruby_say(spoken)
-            try:
-                from PIL import Image
-                from tools.snapchat_filters import apply_filter, FILTERS
-                matched = None
-                for f in FILTERS:
-                    if f.lower() == filter_name.lower():
-                        matched = f
-                        break
-                chosen = matched if matched else "none"
-                base_path = None
-                for cand in ["ruby_base.jpg", "ruby_base.png", "RUBY_03.png", "RUBY/RUBY_03.png", "RUBY/RUBY_03.jpg"]:
-                    if os.path.exists(cand):
-                        base_path = cand
-                        break
-                if base_path:
-                    base_img = Image.open(base_path).convert("RGB")
-                    filtered = apply_filter(base_img, chosen)
-                    os.makedirs("ruby_selfies", exist_ok=True)
-                    out_path = f"ruby_selfies/ruby_{chosen.replace(' ', '_')}.jpg"
-                    filtered.save(out_path, quality=90)
-                    chat.controls.append(ft.Image(src=out_path, width=300, height=300, border_radius=10))
-            except Exception as ex:
-                print(f"⚠️ Selfie generation error: {ex}")
-        else:
-            await ruby_say(reply)
+        await deliver_reply(reply)
 
         try:
             curiosity.save_memory()
@@ -1057,6 +1055,39 @@ def main(page: ft.Page):
     page.update()
 
     page.run_task(ws_server.serve)
+
+    # ----------------------------------------
+    # Ruby texting first (see brain/proactive.py for the rules)
+    # ----------------------------------------
+    async def proactive_loop():
+        await asyncio.sleep(45)      # let the app settle after launch
+        while True:
+            try:
+                if (settings.get("proactive_enabled", True)
+                        and brain.is_loaded() and not brain_busy["v"]):
+                    brain_busy["v"] = True
+                    try:
+                        plan = await asyncio.to_thread(response_engine.plan_proactive)
+                        if plan:
+                            print(f"💌 proactive plan: {plan['reason']} (idle {plan['idle_hours']}h)")
+                            depth = max(1, len(chat.controls) // 2)
+                            prompt = build_ruby_prompt(interaction_depth=depth)
+                            status.value = "💭 Ruby is typing..."
+                            page.update()
+                            reply = await asyncio.to_thread(
+                                response_engine.respond_proactive, prompt, plan
+                            )
+                            if reply:
+                                await deliver_reply(reply)
+                            status.value = "🧠 Ruby is ready."
+                            page.update()
+                    finally:
+                        brain_busy["v"] = False
+            except Exception as ex:
+                print(f"⚠️ proactive loop error: {ex}")
+            await asyncio.sleep(60)
+
+    page.run_task(proactive_loop)
 
     if settings.has_model():
         print(f"📂 Auto-loading: {settings.get('model_name')}")
