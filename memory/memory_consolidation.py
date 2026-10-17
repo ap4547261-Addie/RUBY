@@ -72,7 +72,8 @@ class MemoryConsolidation:
         text_lower = text.lower()
         patterns = [
             (r"my name is ([a-z\s]+?)(?:[.,!?]|$)", "name"),
-            (r"i'?m ([a-z\s]+?)(?:[.,!?]|$)", "name"),
+            # (removed the loose "i'm X" -> name pattern: "i'm tired" saved
+            #  "tired" as the user's name)
             (r"people call me ([a-z\s]+?)(?:[.,!?]|$)", "nickname"),
             (r"my favorite color is ([a-z\s]+?)(?:[.,!?]|$)", "favorite_color"),
             (r"my favorite food is ([a-z\s]+?)(?:[.,!?]|$)", "favorite_food"),
@@ -135,7 +136,18 @@ class MemoryConsolidation:
                 parts.append(f"You remember about {display}: {', '.join(fact_bits)}.")
 
         # 2. Relevant past episode
-        keywords = [w for w in user_message.lower().split() if len(w) >= 4]
+        stopwords = {
+            "what", "that", "this", "with", "have", "they", "them", "your",
+            "just", "like", "about", "would", "could", "should", "there",
+            "their", "been", "were", "will", "from", "when", "where", "which",
+            "then", "than", "really", "know", "think", "dont", "cant", "does",
+            "into", "very", "much", "some", "okay", "yeah", "also", "because",
+        }
+        keywords = []
+        for w in user_message.lower().split():
+            w = w.strip(".,!?;:\"'()[]")
+            if len(w) >= 4 and w not in stopwords:
+                keywords.append(w)
         found = []
         for kw in keywords[:2]:
             for row in self.episodic.search(kw, limit=1):
