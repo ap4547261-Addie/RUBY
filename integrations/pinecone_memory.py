@@ -13,9 +13,24 @@ import requests
 # PLACEHOLDERS — workflow injects real values at build time
 # DO NOT put real keys here
 # ============================================================
-PINECONE_API_KEY    = "pcsk_3wtXBp_SsRhsVutqJDGz3tpTeUTx14CdFFAkvPX1kY34DZh8Gi9kaFHK9VgwUaW3njkS4g"
+PINECONE_API_KEY = "pcsk_3wtXBp_SsRhsVutqJDGz3tpTeUTx14CdFFAkvPX1kY34DZh8Gi9kaFHK9VgwUaW3njkS4g"
 PINECONE_INDEX_HOST = "https://ruby-64ic35r.svc.aped-4627-b74a.pinecone.io"
 PINECONE_INDEX_NAME = "ruby"
+
+# Real values come from (in order): environment variables, then
+# integrations/secrets.py (which the GitHub Actions build fills in).
+# Never hard-code them in this file — the repository is public.
+try:
+    from integrations import secrets as _secrets
+    PINECONE_API_KEY = getattr(_secrets, "PINECONE_API_KEY", PINECONE_API_KEY)
+    PINECONE_INDEX_HOST = getattr(_secrets, "PINECONE_INDEX_HOST", PINECONE_INDEX_HOST)
+    PINECONE_INDEX_NAME = getattr(_secrets, "PINECONE_INDEX_NAME", PINECONE_INDEX_NAME)
+except Exception:
+    pass
+
+PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY", PINECONE_API_KEY)
+PINECONE_INDEX_HOST = os.environ.get("PINECONE_INDEX_HOST", PINECONE_INDEX_HOST)
+PINECONE_INDEX_NAME = os.environ.get("PINECONE_INDEX_NAME", PINECONE_INDEX_NAME)
 # ============================================================
 
 
