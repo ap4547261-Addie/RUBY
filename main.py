@@ -87,6 +87,17 @@ def main(page: ft.Page):
         )
         page.update()
 
+    async def ruby_say(text):
+        """Show Ruby's reply as separate chat bubbles with a short typing pause.
+        Each line of the reply is one bubble (see LocalBrain._clean)."""
+        bubbles = [b.strip() for b in (text or "").split("\n") if b.strip()] or [text]
+        for i, bubble in enumerate(bubbles):
+            if i > 0:
+                status.value = "💭 typing..."
+                page.update()
+                await asyncio.sleep(min(2.0, 0.4 + len(bubble) * 0.025))
+            add_message("Ruby", bubble)
+
     def show_snack(text):
         page.snack_bar = ft.SnackBar(ft.Text(text))
         page.snack_bar.open = True
@@ -239,7 +250,7 @@ def main(page: ft.Page):
         if selfie_match:
             filter_name = selfie_match.group(1).strip()
             spoken = re.sub(r"\[SEND_SELFIE:[^\]]+\]", "", reply).strip()
-            add_message("Ruby", spoken)
+            await ruby_say(spoken)
             try:
                 from PIL import Image
                 from tools.snapchat_filters import apply_filter, FILTERS
@@ -250,7 +261,7 @@ def main(page: ft.Page):
                         break
                 chosen = matched if matched else "none"
                 base_path = None
-                for cand in ["ruby_base.jpg", "ruby_base.png", "RUBY/RUBY_03.png", "RUBY/RUBY_03.jpg"]:
+                for cand in ["ruby_base.jpg", "ruby_base.png", "RUBY_03.png", "RUBY/RUBY_03.png", "RUBY/RUBY_03.jpg"]:
                     if os.path.exists(cand):
                         base_path = cand
                         break
@@ -266,7 +277,7 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"⚠️ Selfie in vision turn failed: {ex}")
         else:
-            add_message("Ruby", reply)
+            await ruby_say(reply)
 
         status.value = "🧠 Ruby is ready."
         page.update()
@@ -943,7 +954,7 @@ def main(page: ft.Page):
         if selfie_match:
             filter_name = selfie_match.group(1).strip()
             spoken = re.sub(r"\[SEND_SELFIE:[^\]]+\]", "", reply).strip()
-            add_message("Ruby", spoken)
+            await ruby_say(spoken)
             try:
                 from PIL import Image
                 from tools.snapchat_filters import apply_filter, FILTERS
@@ -954,7 +965,7 @@ def main(page: ft.Page):
                         break
                 chosen = matched if matched else "none"
                 base_path = None
-                for cand in ["ruby_base.jpg", "ruby_base.png", "RUBY/RUBY_03.png", "RUBY/RUBY_03.jpg"]:
+                for cand in ["ruby_base.jpg", "ruby_base.png", "RUBY_03.png", "RUBY/RUBY_03.png", "RUBY/RUBY_03.jpg"]:
                     if os.path.exists(cand):
                         base_path = cand
                         break
@@ -968,7 +979,7 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"⚠️ Selfie generation error: {ex}")
         else:
-            add_message("Ruby", reply)
+            await ruby_say(reply)
 
         try:
             curiosity.save_memory()
