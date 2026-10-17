@@ -101,6 +101,14 @@ class MemoryRouter:
             "motivation",
             "relationship",
         ],
+
+        # Her looks, being called weird, having no friends, modelling,
+        # compliments — pulls the childhood story behind it and her feelings.
+        "appearance": [
+            "childhood",
+            "emotion",
+            "relationship",
+        ],
     }
 
     # ============================================================
@@ -279,6 +287,29 @@ class MemoryRouter:
             r"\bwhat\s+you\s+worry\s+about\b",
             r"\bwhat\s+you\s+care\s+about\b",
         ],
+
+        # --------------------------------------------------------
+        # APPEARANCE / BEING CALLED WEIRD / MODELLING / COMPLIMENTS
+        # --------------------------------------------------------
+
+        "appearance": [
+            r"\bweird(o)?\b",
+            r"\bfreaks?\b",
+            r"\bno friends\b",
+            r"\b(do you have|have you got|got any|any) friends?\b",
+            r"\bbull(y|ied|ies|ying)\b",
+            r"\bteased\b",
+            r"\bmade fun\b",
+            r"\byour (hair|skin|freckles?|eyes|looks|face)\b",
+            r"\bfreckles?\b",
+            r"\bsilver\b",
+            r"\bmodel(l)?(ing)?\b",
+            r"\bportfolio\b",
+            r"\b(pretty|beautiful|gorgeous|stunning|cute)\b",
+            r"\bcompliments?\b",
+            r"\bwhat do you look like\b",
+            r"\bhow do you look\b",
+        ],
     }
 
     # ============================================================
@@ -350,6 +381,7 @@ class MemoryRouter:
         "reflective": 3,
         "love": 4,
         "deep_self": 4,
+        "appearance": 3,
     }
 
     def __init__(self, user_name: str = "not_set"):
