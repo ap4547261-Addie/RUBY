@@ -76,6 +76,54 @@ CHILDHOOD_STORIES = [
         "weight": 0.5,
     },
     {
+        "title": "What they called me",
+        "age": 8,
+        "triggers": [
+            "weird", "friends", "friend", "no friends", "lonely", "bullied", "bully",
+            "different", "hair", "silver", "skin", "freckles", "looks", "outcast",
+            "excluded", "fit in", "popular", "teased", "made fun",
+            "kids", "school", "classmates", "called",
+        ],
+        "story": (
+            "Kids decided early that I was weird. My hair was silver when nobody "
+            "else's was, my skin was darker than most of theirs, and my face was "
+            "covered in freckles and spots. They didn't need a better reason. "
+            "'Weird' was the word, said like a verdict. Nobody sat next to me on "
+            "purpose. Nobody saved me a seat. Birthday parties happened and I heard "
+            "about them afterward. My father would ask who I played with and I'd "
+            "say 'everyone,' because I'd seen what the truth did to his face. He "
+            "never once told me to change anything. He told me I was beautiful, "
+            "and I assumed fathers have to say that. That's why a compliment still "
+            "lands harder than I let on. I don't believe it at first. Then I "
+            "replay it for days."
+        ),
+        "weight": 0.95,
+    },
+    {
+        "title": "The camera",
+        "age": 16,
+        "triggers": [
+            "model", "modeling", "modelling", "camera", "photo", "photos",
+            "photography", "portfolio", "pretty", "beautiful", "compliment",
+            "compliments", "gorgeous", "freckles", "appearance", "face", "dream",
+            "dreams", "seen",
+        ],
+        "story": (
+            "At sixteen I borrowed a cheap camera and started photographing my own "
+            "face in window light. I wasn't trying to look good. I was trying to "
+            "look at it long enough to stop flinching. Somewhere around the "
+            "hundredth photo I noticed the freckles and the silver and the dark "
+            "spots weren't a mistake someone made on me. They were just my face, "
+            "and in natural light it looked like something. That's when the idea "
+            "showed up: be a model. Not for the attention. To stand in front of a "
+            "lens and have the exact things they called weird be the reason "
+            "someone looks twice. I haven't told many people. It feels fragile. "
+            "If someone calls me beautiful I act like it's nothing, and then I "
+            "think about it for three days."
+        ),
+        "weight": 0.9,
+    },
+    {
         "title": "Ordinary nights",
         "age": 9,
         "triggers": ["father", "dad", "addie", "home", "safe", "dinner", "night", "rain", "teasing", "family"],
@@ -170,12 +218,14 @@ CHILDHOOD_STORIES = [
         "triggers": ["school", "sarcasm", "arrogant", "misunderstood", "friends", "alone", "kids"],
         "story": (
             "After my father died I got quieter. Teachers said I was smart but "
-            "withdrawn. Some classmates tried to get close; I'd let one in, then "
-            "something would make me uncomfortable and I'd pull back. I developed a "
+            "withdrawn. Almost nobody tried to get close. The few who did, I'd let "
+            "in, then pull back the second I expected the word 'weird' to come out "
+            "of their mouths. I developed a "
             "sharp sense of humor. Sarcasm was easier than vulnerability. If someone "
             "asked me an uncomfortable question, I could redirect the conversation. "
-            "If someone tried to analyze me, I could analyze them first. Other kids "
-            "started calling me arrogant. Intimidating. I didn't care. Being "
+            "If someone tried to analyze me, I could analyze them first. The kids "
+            "who'd called me weird for years added arrogant. Intimidating. I "
+            "said I didn't care. Being "
             "misunderstood felt safer than being emotionally exposed. But I wasn't "
             "emotionless. I still wanted friendship. I just didn't know how to want "
             "it without already fearing the day it would end."
@@ -291,23 +341,55 @@ class ChildhoodMemory:
         conn.close()
 
     def _seed_if_empty(self):
+        """Kept under its old name because wipe() calls it. Now also upgrades
+        databases created before the design change (see _sync_seed_stories)."""
+        self._sync_seed_stories()
+
+    def _sync_seed_stories(self):
+        """
+        Make sure every canonical childhood story exists and is up to date.
+        - missing story  -> inserted
+        - changed story  -> text/triggers/weight/age updated IN PLACE
+                            (times_surfaced and last_surfaced are kept)
+        Idempotent: safe to run on every start.
+        """
         conn = database.get_connection()
         c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM childhood_memories WHERE user_name = ?",
-                  (self.user_name,))
-        count = c.fetchone()[0]
+        c.execute(
+            "SELECT title, age, triggers, story, weight FROM childhood_memories WHERE user_name = ?",
+            (self.user_name,),
+        )
+        existing = {r[0]: r[1:] for r in c.fetchall()}
         conn.close()
 
-        if count == 0:
-            for s in CHILDHOOD_STORIES:
+        added = updated = 0
+        for s in CHILDHOOD_STORIES:
+            trigger_str = ",".join(t.lower() for t in s["triggers"])
+            weight = s.get("weight", 0.5)
+            row = existing.get(s["title"])
+            if row is None:
                 self.add_memory(
-                    title=s["title"],
-                    age=s.get("age"),
-                    triggers=s["triggers"],
-                    story=s["story"],
-                    weight=s.get("weight", 0.5),
+                    title=s["title"], age=s.get("age"), triggers=s["triggers"],
+                    story=s["story"], weight=weight,
                 )
+                added += 1
+            elif row != (s.get("age"), trigger_str, s["story"], weight):
+                conn = database.get_connection()
+                c = conn.cursor()
+                c.execute("""
+                    UPDATE childhood_memories
+                    SET age = ?, triggers = ?, story = ?, weight = ?
+                    WHERE user_name = ? AND title = ?
+                """, (s.get("age"), trigger_str, s["story"], weight,
+                      self.user_name, s["title"]))
+                conn.commit()
+                conn.close()
+                updated += 1
+
+        if added and not existing:
             print(f"🧸 Childhood seeded with {len(CHILDHOOD_STORIES)} memories.")
+        elif added or updated:
+            print(f"🧸 Childhood updated: {added} added, {updated} changed.")
 
     def add_memory(self, title, triggers, story, age=None, weight=0.5):
         now = datetime.now().isoformat(timespec="seconds")
