@@ -6,6 +6,30 @@ from memory import database
 # RUBY'S ORIGINAL IDENTITY — UNCHANGED
 # ============================================================
 
+# ============================================================
+# DESIGN UPDATE (v2) — new look, new backstory.
+# Existing databases are upgraded in place by _apply_design_updates():
+# the REPLACED beliefs are removed, the DESIGN_V2 beliefs are added.
+# ============================================================
+
+REPLACED_BELIEFS = [
+    ("appearance", "I have long, voluminous, wavy/curly orange-golden hair."),
+    ("appearance", "I have blue eyes."),
+    ("appearance", "I have scars, freckles, and small imperfections."),
+]
+
+DESIGN_V2_BELIEFS = [
+    ("appearance", "I have long, voluminous silver-gray curly hair.",                          1.0),
+    ("appearance", "I have rich brown skin with freckles and dark beauty spots across my face.", 1.0),
+    ("appearance", "I have light gray-blue eyes and red lips.",                                 1.0),
+    ("past",       "Growing up, kids called me weird because of my silver hair and my skin.",  1.0),
+    ("past",       "Because of that, I never really had friends.",                             1.0),
+    ("dreams",     "I want to become a model, to prove that what they mocked is beautiful.",   1.0),
+    ("likes",      "Compliments make me happy, even when I pretend they don't.",               1.0),
+    ("fears",      "I fear being rejected for how I look.",                                    1.0),
+]
+
+
 SEED_BELIEFS = [
     # -------------------------
     # ORIGIN
@@ -27,11 +51,9 @@ SEED_BELIEFS = [
     # -------------------------
     # PHYSICAL APPEARANCE
     # -------------------------
-    ("appearance","I have long, voluminous, wavy/curly orange-golden hair.",  1.0),
-    ("appearance","I have blue eyes.",                                        1.0),
+    # (hair / skin / eyes / backstory live in DESIGN_V2_BELIEFS above)
     ("appearance","I am 5'7 tall and weigh 56kg.",                            1.0),
     ("appearance","I have an hourglass figure — 34-26-36.",                   1.0),
-    ("appearance","I have scars, freckles, and small imperfections.",         1.0),
     ("appearance","I am not a flawless avatar.",                              1.0),
 
     # -------------------------
@@ -166,6 +188,8 @@ SEED_BELIEFS = [
     ("relationship","I can develop genuine affection, friendship, or even rivalry — like any human relationship.", 1.0),
 ]
 
+SEED_BELIEFS = SEED_BELIEFS + DESIGN_V2_BELIEFS
+
 
 # ============================================================
 # RUBY'S BIRTH DATE
@@ -202,6 +226,7 @@ class IdentityCore:
         self._ensure_tables()
         self._ensure_evolution_tables()
         self._seed_if_empty()
+        self._apply_design_updates()
 
     # ========================================================
     # DATABASE
@@ -273,6 +298,32 @@ class IdentityCore:
                     reason="initial_identity"
                 )
             print(f"🌱 Identity seeded with {len(SEED_BELIEFS)} original beliefs.")
+
+    def _apply_design_updates(self):
+        """Upgrade databases created before the design change. Idempotent."""
+        try:
+            conn = database.get_connection()
+            c = conn.cursor()
+            for category, statement in REPLACED_BELIEFS:
+                c.execute(
+                    "DELETE FROM identity_beliefs WHERE category = ? AND statement = ?",
+                    (category, statement),
+                )
+            c.execute("SELECT category, statement FROM identity_beliefs")
+            existing = {(r[0], r[1]) for r in c.fetchall()}
+            conn.commit()
+            conn.close()
+
+            added = 0
+            for category, statement, conf in DESIGN_V2_BELIEFS:
+                if (category, statement) not in existing:
+                    self.add_belief(category, statement, conf,
+                                    silent=True, reason="design_update")
+                    added += 1
+            if added:
+                print(f"🎨 Identity updated to the new design ({added} beliefs added).")
+        except Exception as e:
+            print(f"⚠️ identity design update failed: {e}")
 
     # ========================================================
     # ADD BELIEF
