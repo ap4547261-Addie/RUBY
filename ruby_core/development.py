@@ -40,15 +40,10 @@ class Development:
 
     def tick(self):
         s = self.state.get()
-        last = s.get("last_updated")
 
-        hours_passed = 0.0
-        if last:
-            try:
-                last_dt = datetime.fromisoformat(last)
-                hours_passed = max(0.0, (datetime.now() - last_dt).total_seconds() / 3600)
-            except Exception:
-                hours_passed = 0.0
+        # Previously this read s["last_updated"], which InternalState never
+        # stored, so hours_passed was always 0 and nothing ever recovered.
+        hours_passed = self.state.hours_since_update()
 
         deltas = {}
 
