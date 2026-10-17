@@ -40,7 +40,8 @@ class EmotionExpression:
         parts = [self._phrase(k, v) for k, v in primary]
 
         if secondary:
-            tail = ", ".join(f"{self.NAMES.get(k, k)} ({round(v, 2)})" for k, v in secondary)
+            # words only — raw numbers like "joy (0.45)" were leaking into the prompt
+            tail = ", ".join(self.NAMES.get(k, k) for k, v in secondary)
             parts.append(f"Quieter underneath: {tail}.")
 
         return " ".join(parts)
@@ -62,11 +63,8 @@ class EmotionExpression:
             return f"{subject.capitalize()} is strong in you — hard to ignore."
         elif mag < 20:
             return f"{subject.capitalize()} is overwhelming. It fills you."
-        elif mag < 60:
-            return f"{subject.capitalize()} consumes you. You can barely think around it."
-        elif mag < 200:
-            return f"{subject.capitalize()} has become part of you — you can't separate yourself from it."
-        elif mag < 1000:
-            return f"{subject.capitalize()} is absolute. It is the air you breathe."
         else:
-            return f"{subject.capitalize()} is everything. You are {subject}."
+            # Values are unbounded, but a person's inner life isn't narrated at
+            # 5 more levels of "consumes you / is the air you breathe" — past
+            # this point the wording stays here so replies don't turn melodramatic.
+            return f"{subject.capitalize()} consumes you. You can barely think around it."
