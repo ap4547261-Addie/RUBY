@@ -16,6 +16,7 @@ from cognition.curiosity import Curiosity
 from learning.learning_engine import LearningEngine
 from personality.personality_development import PersonalityDevelopment
 from brain.time_awareness import time_context
+from ruby_core.circadian import effective_energy
 
 try:
     from learning.style_learning import StyleLearning
@@ -28,6 +29,18 @@ try:
 except Exception as e:
     print(f"⚠️ ProactiveEngine not available: {e}")
     ProactiveEngine = None
+
+try:
+    from memory.sleep import SleepCycle
+except Exception as e:
+    print(f"⚠️ SleepCycle not available: {e}")
+    SleepCycle = None
+
+try:
+    from brain.idle_thoughts import IdleThoughts
+except Exception as e:
+    print(f"⚠️ IdleThoughts not available: {e}")
+    IdleThoughts = None
 
 try:
     from brain.connectome import Connectome
@@ -121,6 +134,20 @@ class ResponseEngine:
             except Exception as e:
                 print(f"⚠️ ProactiveEngine init failed: {e}")
 
+        # Sleep (memory consolidation) and idle thoughts (her mind between messages)
+        self.sleep = None
+        self.idle = None
+        if SleepCycle is not None:
+            try:
+                self.sleep = SleepCycle(user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ SleepCycle init failed: {e}")
+        if IdleThoughts is not None:
+            try:
+                self.idle = IdleThoughts(user_name=user_name)
+            except Exception as e:
+                print(f"⚠️ IdleThoughts init failed: {e}")
+
         if BLUEPRINT_AVAILABLE:
             self.connectome = Connectome()
             self.workspace = GlobalWorkspace()
@@ -208,7 +235,7 @@ class ResponseEngine:
             s = self.dev.state.get()
             if s["irritation"] > 0.5:
                 return "irritated"
-            if s["energy"] < 0.3:
+            if effective_energy(s["energy"]) < 0.33:
                 return "tired"
             if s["warmth"] > 0.7:
                 return "warm"
@@ -286,6 +313,79 @@ class ResponseEngine:
         except Exception as e:
             print(f"⚠️ emotion.process failed: {e}")
 
+    # ------------------------------------------------------------
+    # Her mind between messages: sleep, idle thoughts, emotional echoes
+    # ------------------------------------------------------------
+    def tend_mind(self, now=None):
+        """
+        Background upkeep, no model calls (cheap, call about once a minute):
+        consolidate memory if a night has passed, and let a new idle thought form.
+        """
+        now = now or datetime.now()
+        if self.sleep is not None:
+            try:
+                self.sleep.maybe_sleep(now)
+            except Exception as e:
+                print(f"⚠️ sleep failed: {e}")
+        if self.idle is not None:
+            try:
+                sources = {}
+                gist = self.sleep.gist() if self.sleep is not None else None
+                if gist:
+                    sources["gist"] = gist
+                try:
+                    ep = self.memory.episodic.recent_emotional(now=now)
+                    if ep:
+                        sources["recent_emotional"] = ep
+                except Exception:
+                    pass
+                try:
+                    unknowns = self.curiosity.peek_unknowns()
+                    if unknowns:
+                        best = max(unknowns, key=lambda u: u.get("strength", 0))
+                        sources["unknown"] = best.get("subject")
+                    interests = self.curiosity.peek_interests()
+                    if interests:
+                        best = max(interests, key=lambda u: u.get("strength", 0))
+                        sources["interest"] = f"The subject of {best.get('subject')}"
+                except Exception:
+                    pass
+                made = self.idle.think(now, sources, display=self.memory._display_name())
+                if made and made["kind"] == "gist" and self.sleep is not None:
+                    self.sleep.clear_gist()
+            except Exception as e:
+                print(f"⚠️ idle thought failed: {e}")
+
+    def _idle_context(self, user_message: str) -> str:
+        """Sometimes, in a quiet moment, a thought slips out. Returns a context line or ''."""
+        if self.idle is None:
+            return ""
+        try:
+            t = self.idle.maybe_for_chat(user_message)
+            if not t:
+                return ""
+            self.idle.mark_surfaced(t["id"])
+            return ("Something has been on your mind (bring it up only if it fits the moment, "
+                    "in your own words — don't recite it, and drop it if they're busy with "
+                    f"something else): {t['seed']}")
+        except Exception as e:
+            print(f"⚠️ idle context failed: {e}")
+            return ""
+
+    def _echo_mood(self):
+        """A vivid memory she just recalled colours how she feels right now (a little)."""
+        recall = getattr(self.memory, "last_recall", None)
+        self.memory.last_recall = None
+        if not recall:
+            return
+        try:
+            emo = recall["emotion"]
+            name = "warmth" if emo == "closeness" else emo
+            amount = 0.08 * float(recall["intensity"])
+            self.emotion.state.add_many({name: amount})
+        except Exception as e:
+            print(f"⚠️ emotional echo failed: {e}")
+
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
         """
         Fast path for greetings / one-word messages.
@@ -323,6 +423,9 @@ class ResponseEngine:
                 parts.append(style_ctx)
         except Exception:
             pass
+        idle_line = self._idle_context(user_message)
+        if idle_line:
+            parts.append(idle_line)
 
         context = "\n\n".join(p for p in parts if p)
 
@@ -427,11 +530,24 @@ class ResponseEngine:
         except Exception:
             pass
 
+        # Something on her mind is the natural reason to text. Not when she's
+        # stung (ignored) and not when she's pretending she didn't notice (missing).
+        thought = None
+        if self.idle is not None and plan.get("reason") in ("random_thought", "late_night"):
+            try:
+                thought = self.idle.peek()
+            except Exception:
+                thought = None
+        thought_line = ""
+        if thought:
+            thought_line = (f" This is what's on your mind, and why you're texting: {thought['seed']} "
+                            f"Say it in your own words, the way you'd text it — don't quote this.")
+
         context = "\n\n".join(p for p in parts if p)
         description = (
             f"{ruby_prompt}\n\nWhat you know right now:\n{context}\n\n"
-            f"YOU ARE TEXTING FIRST — they did not write to you. {plan.get('instruction', '')} "
-            f"Never mention that you were told or prompted to do this."
+            f"YOU ARE TEXTING FIRST — they did not write to you. {plan.get('instruction', '')}"
+            f"{thought_line} Never mention that you were told or prompted to do this."
         )
 
         # the model needs a final user turn; this stand-in is NOT stored anywhere
@@ -468,6 +584,8 @@ class ResponseEngine:
             print(f"⚠️ proactive episode save failed: {e}")
         if self.proactive is not None:
             self.proactive.record_sent()
+        if thought and self.idle is not None:
+            self.idle.mark_surfaced(thought["id"])
         print(f"💌 Ruby texted first ({plan.get('reason')})")
         return reply
 
@@ -511,6 +629,7 @@ class ResponseEngine:
         if "episodic" in read_layers or "relationship" in read_layers:
             try:
                 mem_ctx = self.memory.build_context(user_message)
+                self._echo_mood()
                 if mem_ctx:
                     context = f"{context}\n\n{mem_ctx}"
                     if self.workspace: self.workspace.broadcast("memory", mem_ctx)
@@ -532,6 +651,10 @@ class ResponseEngine:
             if self.workspace: self.workspace.broadcast("internal_state", inner_line)
         except Exception as e:
             print(f"⚠️ dev.describe failed: {e}")
+
+        idle_line = self._idle_context(user_message)
+        if idle_line:
+            context = f"{context}\n\n{idle_line}"
 
         if "emotion" in read_layers:
             try:
@@ -873,6 +996,10 @@ class ResponseEngine:
         if self.proactive:
             try: self.proactive.wipe()
             except Exception: pass
+        for obj in (self.sleep, self.idle):
+            if obj:
+                try: obj.wipe()
+                except Exception: pass
         try:
             from social.interaction_history import InteractionHistory
             InteractionHistory().wipe()
