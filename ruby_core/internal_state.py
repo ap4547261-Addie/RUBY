@@ -4,6 +4,7 @@
 import os
 import json
 from datetime import datetime
+from ruby_core.circadian import effective_energy
 
 
 def _state_path(user_name: str) -> str:
@@ -82,12 +83,14 @@ class InternalState:
     def _clamp(v: float) -> float:
         return max(0.0, min(1.0, v))
 
-    def describe(self) -> str:
+    def describe(self, now=None) -> str:
         d = self._data
         parts = []
-        if d["energy"] > 0.7:
+        # energy = what the conversation has cost her, scaled by the body clock
+        e = effective_energy(d["energy"], now)
+        if e > 0.7:
             parts.append("energetic")
-        elif d["energy"] < 0.3:
+        elif e < 0.33:
             parts.append("tired")
         if d["warmth"] > 0.7:
             parts.append("warm")
