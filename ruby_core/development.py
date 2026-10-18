@@ -1,6 +1,7 @@
 # ruby_core/development.py
 from datetime import datetime
 from ruby_core.internal_state import InternalState
+from ruby_core.circadian import phase as circadian_phase
 from emotion.compliments import compliment_kind
 
 try:
@@ -97,8 +98,13 @@ class Development:
 
         self._apply_deltas(deltas)
 
-    def describe(self):
-        return self.state.describe()
+    def describe(self, now=None):
+        """Mood + where she is in her day (her body clock, not just the chat)."""
+        base = self.state.describe(now)
+        try:
+            return f"{base}. Right now {circadian_phase(now)}"
+        except Exception:
+            return base
 
     def wipe(self):
         self.state.wipe()
