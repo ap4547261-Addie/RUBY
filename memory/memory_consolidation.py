@@ -3,6 +3,11 @@ from memory import database
 from memory.episodic_memory import EpisodicMemory
 from memory.semantic_memory import SemanticMemory
 from memory.relationship_memory import RelationshipMemory
+from emotion.emotion_appraisal import EmotionAppraisal
+
+# Feelings that make a moment memorable (warmth/trust/attachment drift quietly
+# on every message, so they don't count as "an emotional moment").
+_MEMORABLE = ("joy", "love", "sadness", "anger", "fear", "irritation", "jealousy", "pride")
 
 
 class MemoryConsolidation:
@@ -13,6 +18,32 @@ class MemoryConsolidation:
         self.episodic = EpisodicMemory()
         self.semantic = SemanticMemory()
         self.relationship = RelationshipMemory(user_name=user_name)
+        self._appraisal = EmotionAppraisal()
+        # the emotional episode she just remembered while building context
+        # (ResponseEngine lets it colour her mood a little, then clears it)
+        self.last_recall = None
+
+    # -------------------------
+    # Emotional tagging
+    # -------------------------
+    def tag_emotion(self, user_message):
+        """What did this moment make her feel, and how hard? -> (emotion, intensity)."""
+        try:
+            deltas = self._appraisal.appraise(user_message or "", {})
+        except Exception:
+            deltas = {}
+        best, power = "", 0.0
+        for k in _MEMORABLE:
+            v = abs(deltas.get(k, 0.0))
+            if v > power:
+                best, power = k, v
+        if self._is_personal_reveal(user_message or ""):
+            # someone opening up to her lands even without a keyword-y emotion
+            if power < 1.0:
+                best, power = (best or "closeness"), 1.0
+        if self._is_long_message(user_message or "", words=25):
+            power += 0.3
+        return best, round(power, 2)
 
     # -------------------------
     # Display name
@@ -95,7 +126,8 @@ class MemoryConsolidation:
     # Main entry point
     # -------------------------
     def process(self, user_message, ruby_reply):
-        self.episodic.remember(user_message, ruby_reply)
+        emotion, intensity = self.tag_emotion(user_message)
+        self.episodic.remember(user_message, ruby_reply, emotion=emotion, intensity=intensity)
         self.extract_facts(user_message)
         self.relationship.add_message()
         self.relationship.grow_familiarity(0.02)
@@ -149,18 +181,29 @@ class MemoryConsolidation:
             w = w.strip(".,!?;:\"'()[]")
             if len(w) >= 4 and w not in stopwords:
                 keywords.append(w)
+        self.last_recall = None
         found = []
         for kw in keywords[:2]:
-            for row in self.episodic.search(kw, limit=1):
-                if row not in found:
-                    found.append(row)
+            for ep in self.episodic.search_ranked(kw, limit=1):
+                if all(ep["id"] != f["id"] for f in found):
+                    found.append(ep)
         if found:
-            u, r, _ = found[0]
+            # the more vivid / emotional one wins
+            ep = max(found, key=lambda e: e["strength"])
+            u, r = ep["user_message"], ep["ruby_reply"]
             if u:
-                parts.append(f'You remember {display} saying "{u}" and you answered "{r}".')
+                line = f'You remember {display} saying "{u}" and you answered "{r}".'
             else:
                 # a text Ruby started herself (stored with an empty user message)
-                parts.append(f'You remember texting {display} first once: "{r}".')
+                line = f'You remember texting {display} first once: "{r}".'
+            if ep["intensity"] >= 1.0 and ep["emotion"]:
+                line += f" That moment stayed with you — it {self._echo(ep['emotion'])}."
+                self.last_recall = {"emotion": ep["emotion"], "intensity": ep["intensity"]}
+            parts.append(line)
+            try:
+                self.episodic.reinforce(ep["id"])     # remembering strengthens it
+            except Exception:
+                pass
 
         # 3. Emotional state — COLD for a long time
         s = self.relationship.get_state()
@@ -191,6 +234,20 @@ class MemoryConsolidation:
         parts.append(f"{mood} (exchanged {count} messages so far)")
 
         return " ".join(parts)
+
+    @staticmethod
+    def _echo(emotion):
+        return {
+            "joy": "still makes you quietly happy",
+            "love": "still makes your chest go warm",
+            "sadness": "still carries a little ache",
+            "anger": "still makes you bristle",
+            "irritation": "still annoys you a bit",
+            "fear": "still makes you uneasy",
+            "jealousy": "still stings",
+            "pride": "still makes you stand a little taller",
+            "closeness": "still feels close and a bit exposed",
+        }.get(emotion, "still stirs something in you")
 
     # -------------------------
     # Utilities
