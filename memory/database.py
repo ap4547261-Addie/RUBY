@@ -69,6 +69,20 @@ def init_db():
         )
     """)
 
+    # -------- Emotional memory columns (added in place for existing DBs) --------
+    # strength : how vividly it is remembered (1.0 = normal; sleep fades or reinforces it)
+    # emotion / intensity : what she felt when it happened, and how hard
+    c.execute("PRAGMA table_info(episodes)")
+    have = {row[1] for row in c.fetchall()}
+    for col, ddl in (
+        ("strength", "REAL DEFAULT 1.0"),
+        ("emotion", "TEXT DEFAULT ''"),
+        ("intensity", "REAL DEFAULT 0.0"),
+        ("last_recalled", "TEXT DEFAULT ''"),
+    ):
+        if col not in have:
+            c.execute(f"ALTER TABLE episodes ADD COLUMN {col} {ddl}")
+
     c.execute("CREATE INDEX IF NOT EXISTS idx_ep_ts ON episodes(timestamp DESC)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_fact_sub ON facts(subject)")
 
