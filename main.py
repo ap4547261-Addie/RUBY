@@ -1063,6 +1063,9 @@ def main(page: ft.Page):
         await asyncio.sleep(45)      # let the app settle after launch
         while True:
             try:
+                # background upkeep of her mind (sleep, idle thoughts) — no model needed
+                if not brain_busy["v"]:
+                    await asyncio.to_thread(response_engine.tend_mind)
                 if (settings.get("proactive_enabled", True)
                         and brain.is_loaded() and not brain_busy["v"]):
                     brain_busy["v"] = True
