@@ -43,6 +43,13 @@ except Exception as e:
     IdleThoughts = None
 
 try:
+    from brain.scene_from_reply import extract_scene, is_status_question
+    from tools.ruby_state import RubyState
+except Exception as e:
+    print(f"⚠️ Scene photos not available: {e}")
+    extract_scene = is_status_question = RubyState = None
+
+try:
     from brain.connectome import Connectome
     from brain.global_workspace import GlobalWorkspace
     BLUEPRINT_AVAILABLE = True
@@ -133,6 +140,14 @@ class ResponseEngine:
                 self.proactive = ProactiveEngine(user_name=user_name)
             except Exception as e:
                 print(f"⚠️ ProactiveEngine init failed: {e}")
+
+        # What she says she's doing/where she is (kept so photos match her words)
+        self.scene_state = None
+        if RubyState is not None:
+            try:
+                self.scene_state = RubyState.load()
+            except Exception as e:
+                print(f"⚠️ RubyState init failed: {e}")
 
         # Sleep (memory consolidation) and idle thoughts (her mind between messages)
         self.sleep = None
@@ -385,6 +400,31 @@ class ResponseEngine:
             self.emotion.state.add_many({name: amount})
         except Exception as e:
             print(f"⚠️ emotional echo failed: {e}")
+
+    def plan_scene(self, user_message: str, reply: str):
+        """
+        Build a photo scene from what Ruby just SAID she's doing / where she is.
+        Her words are remembered either way; a plan is returned only when the user
+        asked what/where she is (or for a picture) and her reply actually says.
+        Returns {"prompt", "scene", "reason"} or None.
+        """
+        if extract_scene is None or self.scene_state is None or self._is_error_reply(reply):
+            return None
+        try:
+            scene = extract_scene(reply)
+            if not scene:
+                return None
+            self.scene_state.update(**scene)
+            if not is_status_question(user_message):
+                return None
+            return {
+                "prompt": self.scene_state.to_scene_prompt(),
+                "scene": dict(self.scene_state.data),
+                "reason": "asked",
+            }
+        except Exception as e:
+            print(f"⚠️ plan_scene failed: {e}")
+            return None
 
     def respond_fast(self, user_message: str, ruby_prompt: str) -> str:
         """
@@ -996,7 +1036,7 @@ class ResponseEngine:
         if self.proactive:
             try: self.proactive.wipe()
             except Exception: pass
-        for obj in (self.sleep, self.idle):
+        for obj in (self.sleep, self.idle, self.scene_state):
             if obj:
                 try: obj.wipe()
                 except Exception: pass
