@@ -28,6 +28,7 @@ DEFAULT_SETTINGS = {
     # -------------------------
     # Behaviour
     # -------------------------
+    "scene_photos_enabled": True,   # photo of what she says she's doing (needs the image generator)
     "proactive_enabled": True,   # Ruby may text first (see brain/proactive.py)
 
     # -------------------------
