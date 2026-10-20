@@ -110,6 +110,29 @@ def main(page: ft.Page):
     def release_brain():
         brain_busy["v"] = False
 
+    scene_lock = asyncio.Lock()      # one photo at a time (the GPU); extra ones simply queue
+
+    async def make_scene_photo(scene):
+        """Generate a photo of Ruby from the scene she described, in the background."""
+        async with scene_lock:
+            try:
+                status.value = "📷 Ruby is taking a photo..."
+                page.update()
+                from tools import scene_photo
+                path = await asyncio.to_thread(scene_photo.generate, scene["prompt"])
+                if path:
+                    os.makedirs("ruby_selfies", exist_ok=True)
+                    shown = os.path.join("ruby_selfies", os.path.basename(str(path)))
+                    shutil.copy(str(path), shown)
+                    chat.controls.append(ft.Image(src=shown, width=320, border_radius=10))
+                else:
+                    print("ℹ️ scene photo could not be made")
+            except Exception as ex:
+                print(f"⚠️ scene photo error: {ex}")
+            finally:
+                status.value = "🧠 Ruby is ready."
+                page.update()
+
     async def deliver_reply(reply):
         """Show a reply as bubbles; if it carries [SEND_SELFIE:filter], send the picture too."""
         selfie_match = re.search(r"\[SEND_SELFIE:\s*([^\]]+)\]", reply)
@@ -344,6 +367,10 @@ def main(page: ft.Page):
         proactive_switch = ft.Switch(
             label="Ruby can text first",
             value=bool(settings.get("proactive_enabled", True)),
+        )
+        scene_photo_switch = ft.Switch(
+            label="Ruby sends a photo of what she's doing",
+            value=bool(settings.get("scene_photos_enabled", True)),
         )
         threads_field = ft.TextField(
             label="Threads",
@@ -799,6 +826,7 @@ def main(page: ft.Page):
                 "context_size": ctx,
                 "threads": thr,
                 "proactive_enabled": bool(proactive_switch.value),
+                "scene_photos_enabled": bool(scene_photo_switch.value),
             })
             status.value = "✅ Settings saved. Restart to apply name change."
             page.close(settings_dialog)
@@ -851,7 +879,7 @@ def main(page: ft.Page):
                     model_name_label,
                     ft.ElevatedButton("Choose Model File", icon=ft.Icons.UPLOAD_FILE,
                                       on_click=pick_model, width=340),
-                    context_field, threads_field, proactive_switch,
+                    context_field, threads_field, proactive_switch, scene_photo_switch,
                     ft.Divider(),
 
                     ft.Text("💭 Memory", weight=ft.FontWeight.BOLD, size=15, color=ft.Colors.PINK_400),
@@ -977,7 +1005,28 @@ def main(page: ft.Page):
 
         status.value = "🧠 Ruby is ready."
 
+        # If they asked what/where she is, the photo is built from what she just said.
+        scene = None
+        try:
+            if settings.get("scene_photos_enabled", True):
+                scene = await asyncio.to_thread(response_engine.plan_scene, msg, reply)
+            else:
+                await asyncio.to_thread(response_engine.plan_scene, "", reply)   # still remember where she is
+        except Exception as ex:
+            print(f"⚠️ plan_scene error: {ex}")
+        make_photo = False
+        if scene:
+            from tools import scene_photo
+            make_photo = scene_photo.available()
+            if not make_photo:
+                print(f"ℹ️ scene photo skipped, missing: {', '.join(scene_photo.missing())}")
+        if make_photo:
+            # the generated scene photo replaces the filtered selfie she might also have asked for
+            reply = re.sub(r"\[SEND_SELFIE:[^\]]+\]", "", reply).strip()
+
         await deliver_reply(reply)
+        if make_photo:
+            page.run_task(make_scene_photo, scene)
 
         try:
             curiosity.save_memory()
